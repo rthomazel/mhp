@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewSetupConsoleOnly(t *testing.T) {
-	l, err := NewSetup("exit", false, "")
+	l, err := NewSetup("exit-node", false, "")
 	if err != nil {
 		t.Fatalf("NewSetup: %v", err)
 	}
@@ -59,13 +59,13 @@ func TestDebugFileCollisionSafeNaming(t *testing.T) {
 	// Force a collision: pre-create the exact base name the next openDebugFile
 	// call will attempt, proving the collision path yields a distinct file
 	// rather than truncating the existing one.
-	baseName := fmt.Sprintf(debugLogPattern, "exit", time.Now().Unix())
+	baseName := fmt.Sprintf(debugLogPattern, "exit-node", time.Now().Unix())
 	preExisting := filepath.Join(dir, baseName)
 	if err := os.WriteFile(preExisting, []byte("victim"), 0o600); err != nil {
 		t.Fatalf("seed collision file: %v", err)
 	}
 
-	_, file, err := openDebugFile("exit", dir)
+	_, file, err := openDebugFile("exit-node", dir)
 	if err != nil {
 		t.Fatalf("openDebugFile: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestUnwritableDebugDirErrors(t *testing.T) {
 	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
 		t.Fatalf("seed file: %v", err)
 	}
-	if _, err := NewSetup("exit", true, filePath); err == nil {
+	if _, err := NewSetup("exit-node", true, filePath); err == nil {
 		t.Fatal("expected error opening debug file under a file-as-directory path")
 	}
 }

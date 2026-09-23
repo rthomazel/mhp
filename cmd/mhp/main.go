@@ -69,7 +69,7 @@ func runWithContext(ctx context.Context, flags config.ParsedFlags) error {
 // parseFlags declares the full flag set and returns the parsed values.
 func parseFlags(argv []string) (config.ParsedFlags, error) {
 	f := flag.NewFlagSet("mhp", flag.ContinueOnError)
-	mode := f.String("mode", "", "one of relay, exit, proxy")
+	mode := f.String("mode", "", "one of relay, exit-node, proxy")
 	listen := f.String("listen", "", "relay listen address (relay) or proxy listen address (proxy, loopback)")
 	relay := f.String("relay", "", "relay address host:port the exit/proxy connect to")
 	tlsName := f.String("tls-name", "", "SNI/server-name override the client presents")

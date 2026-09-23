@@ -53,7 +53,7 @@ func TestParseFlagsExtraction(t *testing.T) {
 
 func TestParseFlagsExitMode(t *testing.T) {
 	argv := []string{
-		"-mode", "exit",
+		"-mode", "exit-node",
 		"-relay", "relay.example.com:443",
 		"-tls-name", "en.zalando.de",
 		"-ca", "ca.pem",
@@ -63,8 +63,8 @@ func TestParseFlagsExitMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseFlags: %v", err)
 	}
-	if flags.Mode != "exit" {
-		t.Errorf("mode = %q, want exit", flags.Mode)
+	if flags.Mode != "exit-node" {
+		t.Errorf("mode = %q, want exit-node", flags.Mode)
 	}
 	if flags.Relay != "relay.example.com:443" {
 		t.Errorf("relay = %q", flags.Relay)
@@ -78,7 +78,7 @@ func TestParseFlagsExitMode(t *testing.T) {
 }
 
 func TestParseFlagsUnknownFlag(t *testing.T) {
-	if _, err := parseFlags([]string{"-mode", "exit", "-relay", "r:443", "-cafe", "nope"}); err == nil {
+	if _, err := parseFlags([]string{"-mode", "exit-node", "-relay", "r:443", "-cafe", "nope"}); err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
 }
@@ -94,7 +94,7 @@ func TestRunWithContextInvalidConfigReturnsProvisionError(t *testing.T) {
 func TestRunWithContextGracefulShutdown(t *testing.T) {
 	token := writeFile(t, "exit.token")
 	flags := config.ParsedFlags{
-		Mode:      "exit",
+		Mode:      "exit-node",
 		Relay:     "127.0.0.1:443",
 		TLSName:   "en.zalando.de",
 		CAPath:    "ca.pem",
@@ -118,7 +118,7 @@ func TestRunWithContextGracefulShutdown(t *testing.T) {
 func TestRunWithContextCancelledMidRun(t *testing.T) {
 	token := writeFile(t, "exit.token")
 	flags := config.ParsedFlags{
-		Mode:      "exit",
+		Mode:      "exit-node",
 		Relay:     "127.0.0.1:443",
 		TLSName:   "en.zalando.de",
 		CAPath:    "ca.pem",

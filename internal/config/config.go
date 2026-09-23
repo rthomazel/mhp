@@ -25,7 +25,7 @@ const (
 	ModeRelay Mode = "relay"
 	// ModeExit connects to the relay as a client and serves SOCKS5 to the
 	// browser.
-	ModeExit Mode = "exit"
+	ModeExit Mode = "exit-node"
 	// ModeProxy connects to the relay as a client and serves a local SOCKS5
 	// proxy.
 	ModeProxy Mode = "proxy"

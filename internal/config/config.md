@@ -23,7 +23,7 @@ failure shape.
 
 ## Mode
 
-1. relay, exit, proxy — the three roles.
+1. relay, exit-node, proxy — the three roles.
 
 ## Config
 
@@ -77,7 +77,7 @@ Structured error describing which option failed and why.
 
 ## validate(cfg, mode) error
 
-1. if mode is relay, exit, or proxy, ensure its required flags are set.
+1. if mode is relay, exit-node, or proxy, ensure its required flags are set.
 2. if mode is proxy, ensure Listen is loopback.
 3. return nil.
 
