@@ -9,7 +9,7 @@ created: 2026-09-23
 
 # MHP implementation tasks
 
-Status: pending; this PR contains no application code. Requirements and decisions live in [plan.md](plan.md). Complete tasks in order; do not interpret this checklist as approval of unresolved TLS provisioning. Record validation results with the implementing PR, not fabricated checkmarks here.
+Status: pending; this PR contains no application code. Requirements and decisions live in [plan.md](plan.md). Complete tasks in order. Private-CA TLS and unauthenticated loopback SOCKS5 are approved. Record validation results with the implementing PR, not fabricated checkmarks here.
 
 ## 1. Bootstrap, configuration and logs
 
@@ -24,9 +24,13 @@ Done when: one binary dispatches all three modes and logs consistently; no netwo
 
 ## 2. Verified TLS, authentication and reconnecting sessions
 
-Depends on task 1 and TLS provisioning decision.
+Depends on task 1. Trust model: self-issued private CA with normal certificate verification enabled.
 
-- [ ] Document certificate/token generation, distribution and renewal using the approved trust model. Never commit private keys/tokens or distribute CA private key to clients/relay.
+- [ ] Document reproducible certificate generation (for example, OpenSSL commands): create an offline CA signing key and self-signed `relay-ca.crt`, then a separate `relay.key` and CA-signed `relay.crt` with server-auth usage, explicit validity and a SAN matching `-tls-name`. With the initial marker SNI, use DNS SAN `en.zalando.de`, trusted only inside MHP; direct IP dialing does not require an IP SAN when verifying that DNS name.
+- [ ] Provision the relay with `relay.crt` and `relay.key`, wired to `-tls-cert` and `-tls-key`. Mount them read-only from persistent storage and restrict key access to the service account (0600 on Unix). Never bake secrets into images. The relay does not need the CA signing key or client certificates; role tokens authenticate clients.
+- [ ] Distribute only public `relay-ca.crt` to both clients through a trusted channel, verify its fingerprint and configure `-ca`. Keep the CA signing key offline with a protected backup; never install this CA in browser/system trust stores.
+- [ ] Document separate role-token generation/delivery and renewal before certificate expiry: sign a replacement relay certificate under the same CA, validate key/name/chain/validity, replace files and restart relay, then confirm both clients reconnect. CA replacement requires updating client trust files. Never commit operational private keys/tokens.
+- [ ] Validate provisioned TLS from both client modes, including rejection of wrong CA, wrong SAN, expired certificate and mismatched relay key. Record public certificate expiry/fingerprint only, not secrets.
 - [ ] Implement bounded TCP dial, TLS handshake, versioned role/token exchange and response, then start yamux only after authentication. Reject oversized/truncated records and clear setup deadlines before mux owns the socket.
 - [ ] Configure yamux keepalive, write/open/close timeouts from the spec. Watch session closure; close owned resources on cancellation.
 - [ ] Implement cancellable retry-forever loop with jitter, cap and stable-session backoff reset. Reload credential/trust files on retry if recovery from corrected provisioning without process restart is promised.

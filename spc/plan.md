@@ -77,11 +77,11 @@ Source inspected locally; these are candidates, not installed dependencies. Pin 
 
 ## TLS, authentication, and initial wire exchange
 
-**Proposed for review:** private CA and relay certificate, supplied as files. Dial the fixed relay IP while setting a separate TLS server name. A private-CA certificate may use the tested marker `en.zalando.de`; this is a routing/camouflage marker, not a claim of ownership, domain fronting, or use of Zalando infrastructure. Alternatively use an operator-owned hostname. Trust the private CA only in MHP, never install it as a browser/system-wide root. Verify normal certificate chain, name, and validity. Never copy netdiag's `InsecureSkipVerify` into MHP. No insecure fallback.
+**Approved:** self-issued private CA and relay certificate, supplied as files. Dial the fixed relay IP while setting a separate TLS server name. A private-CA certificate may use the tested marker `en.zalando.de`; this is a routing/camouflage marker, not a claim of ownership, domain fronting, or use of Zalando infrastructure. Alternatively use an operator-owned hostname. Trust the private CA only in MHP, never install it as a browser/system-wide root. Verify normal certificate chain, name, and validity. Never copy netdiag's `InsecureSkipVerify` into MHP. No insecure fallback.
 
 **Deployment confirmed:** relay will run in its own container as the sole service on a dedicated VPS in Germany; TCP/443 will be available. Actual IP is TBD deployment configuration, not an architecture blocker. This is not a deployment onto the existing shared LGA stack. No shared-listener integration is required.
 
-Separate high-entropy exit and proxy bearer tokens, carried only after verified TLS. Load secrets from role-specific files or environment, not CLI arguments; constant-time comparisons, no token logging. Local SOCKS has no authentication because it binds loopback only; other local users can use it, an accepted single-user-machine assumption requiring review.
+Separate high-entropy exit and proxy bearer tokens, carried only after verified TLS. Load secrets from role-specific files or environment, not CLI arguments; constant-time comparisons, no token logging. Local SOCKS has no authentication because it binds loopback only; other local users can use it, an explicitly approved single-user-machine assumption.
 
 Before starting yamux, exchange bounded control records over TLS:
 
@@ -160,7 +160,7 @@ internal/stream/     net.Conn adapter and cancellation-aware duplex copy
 
 Transport owns TLS socket and mux session. Each stream handler owns its stream pair/destination connection. Constructors don't launch hidden goroutines; `Run(ctx)` methods own and join work. Main uses `signal.NotifyContext`; return errors rather than calling `os.Exit` from packages.
 
-Implementation sequence and verification procedures are maintained in [tasks.md](tasks.md). No production implementation in this PR; TLS provisioning remains under review.
+Implementation sequence and verification procedures are maintained in [tasks.md](tasks.md). No production implementation in this PR; private-CA TLS and loopback-only unauthenticated SOCKS5 are approved.
 
 ## Direct netdiag reuse references
 
@@ -193,7 +193,7 @@ Already agreed: names/topology, single binary with three modes, SOCKS5 browser i
 - Dedicated relay container/VPS with available TCP/443 confirmed; IP TBD at deployment.
 - Netdiag reuse explicitly authorized by its owner.
 
-### Still open: TLS provisioning
+### Approved: TLS provisioning
 
 The relay needs a certificate and private key for the chosen Go TLS transport, even if clients disable verification. Self-issuing is supported: generate a private CA and relay certificate, distribute only the CA public certificate to both clients, and keep the CA private key offline. Relay gets its leaf certificate/key, never the CA private key. Renewal under the same CA need not change client trust files.
 
@@ -201,9 +201,9 @@ Let's Encrypt is an alternative for an operator-controlled hostname with domain 
 
 Copying netdiag's bare `InsecureSkipVerify` would encrypt traffic but not authenticate the relay. An active intermediary could impersonate it, steal the bearer tokens, read/modify plaintext HTTP and SOCKS destinations, and disrupt or redirect flows. Website HTTPS still has its independent browser certificate validation, but does not protect MHP tokens or all proxy metadata. A self-issued certificate with explicitly configured trust avoids that tradeoff; self-issued does not mean unverified.
 
-Recommendation remains private CA + verified relay certificate, with the tested SNI initially. Confirm that versus Let's Encrypt with an owned hostname, and who provisions/distributes the files. No trust-first-use or insecure fallback is proposed. Pinning could also authenticate a self-signed relay, but would add a separate verification/rotation path we do not need initially.
+Thom approved self-issued private CA + verified relay certificate and unauthenticated localhost SOCKS5. Retain the tested SNI initially. Certificate generation, relay certificate/key installation, client CA distribution and renewal are explicit tasks in [tasks.md](tasks.md#2-verified-tls-authentication-and-reconnecting-sessions). No trust-first-use, insecure fallback or separate pinning path is needed.
 
-Operational assumption to confirm: localhost SOCKS is unauthenticated and available to other local users. Separate role tokens protect relay access. Actual IP and credential delivery are deployment inputs, not reasons to add discovery or a database.
+Approved operational assumption: localhost SOCKS is unauthenticated and available to other local users. Separate role tokens protect relay access. Actual IP and credential delivery are deployment inputs, not reasons to add discovery or a database.
 
 Pin exact dependency versions and verify adapter/deadline behavior in a small implementation spike. If APIs require a design change, update the spec rather than introducing unbounded waits. Windows service packaging, multiple exits, log rotation and seamless flow recovery remain follow-ups.
 
