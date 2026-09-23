@@ -1,0 +1,11 @@
+# golangci-lint v2 configuration.
+#
+# In golangci-lint v2, `gofumpt` is a *formatter*, not a *linter*: passing it to
+# `-E` (enable-linters) aborts the run with "gofumpt is a formatter". Formatters
+# therefore belong in the [formatters] section below, which the CI job picks up
+# automatically. Default linters continue to run from the v2 defaults.
+
+version = "2"
+
+[formatters]
+  enable = ["gofumpt"]

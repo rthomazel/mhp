@@ -177,7 +177,7 @@ func TestSecretEquality(t *testing.T) {
 func TestSecretDoesNotLeak(t *testing.T) {
 	// Secret must not satisfy the Stringer or Formatter interfaces, so it can
 	// never leak its bytes through %v, %s, or fmt formatting.
-	var s = Secret{bytes: []byte("supersecret")}
+	s := Secret{bytes: []byte("supersecret")}
 	if _, ok := any(&s).(fmt.Stringer); ok {
 		t.Error("Secret must not be a Stringer")
 	}

@@ -49,13 +49,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      # Single source of truth for formatting: gofmt+gofumpt are enforced as
-      # linters here (AGENTS.md mandates gofumpt) rather than as separate
-      # steps, so one pass covers style + diagnostics.
+      # Formatting + linting come from .golangci.toml (v2 treats gofumpt as a
+      # formatter, so it is enabled via [formatters], not -E). See AGENTS.md.
       - uses: golangci/golangci-lint-action@v9.3.0
         with:
           version: latest
-          args: --timeout=5m -E gofmt,gofumpt
+          args: --timeout=5m
 
   test:
     name: test
