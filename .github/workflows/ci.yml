@@ -1,0 +1,68 @@
+# Workflow gated on pull requests targeting main.
+#
+# Three independent jobs share the same checked-out sources:
+#   build - compiles on Ubuntu and Windows; on Windows it also verifies the
+#           CGO-disabled cross-build that AGENTS.md requires.
+#   lint  - runs gofumpt-style formatting + golangci-lint.
+#   test  - runs the suite with the race detector.
+#
+# Each job stages checkout + Go setup independently so a failure in one never
+# hides the others, and the matrix lets Windows/Linux drift surface separately.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.27.1'
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: build all packages
+        shell: bash
+        run: go build ./...
+      - name: cross-build windows (CGO disabled)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o mhp.exe ./cmd/mhp
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      # Formatting + linting come from .golangci.toml (v2 treats gofumpt as a
+      # formatter, so it is enabled via [formatters], not -E). See AGENTS.md.
+      - uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: latest
+          args: --timeout=5m
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: test with race detector
+        run: go test -race -count=1 ./...
