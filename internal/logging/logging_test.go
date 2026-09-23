@@ -17,7 +17,7 @@ func TestNewSetupConsoleOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSetup: %v", err)
 	}
-	defer l.Closer.Close()
+	defer func() { _ = l.Closer.Close() }()
 	if l.Slog == nil {
 		t.Fatal("expected non-nil Slog")
 	}
@@ -37,7 +37,7 @@ func TestNewSetupCreatesDebugFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSetup: %v", err)
 	}
-	defer l.Closer.Close()
+	defer func() { _ = l.Closer.Close() }()
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -69,7 +69,7 @@ func TestDebugFileCollisionSafeNaming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("openDebugFile: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if filepath.Base(file.Name()) == baseName {
 		t.Errorf("expected a distinct collision-safe name, got %q", file.Name())
