@@ -1,6 +1,6 @@
 ---
 id: 2026-09-23-mhp-plan
-type: documentation
+type: spec
 summary: Review draft for the MHP browser proxy architecture and implementation.
 author: Thom
 agents: Merlin
@@ -31,7 +31,7 @@ Exit runs manually from a BAT file, stays alive, and retries network connections
 
 ## Architecture decision: forward SOCKS5 intact
 
-**Proposed:** each accepted localhost TCP connection becomes one logical stream across each relay leg. Relay copies the SOCKS5 exchange and subsequent bytes unchanged. The SOCKS5 server runs at the exit, not the proxy client.
+**Selected:** each accepted localhost TCP connection becomes one logical stream across each relay leg. Relay copies the SOCKS5 exchange and subsequent bytes unchanged. The SOCKS5 server runs at the exit, not the proxy client.
 
 This avoids a custom destination-request protocol. Firefox sends an IP or hostname; the exit SOCKS5 handler resolves hostnames and dials the destination. Success is sent only after destination dial succeeds. Relay never dials websites or resolves destination names.
 
@@ -48,7 +48,7 @@ No exit available: relay closes the incoming stream promptly; the browser may se
 
 ### Session ownership
 
-Use an in-memory registry, no database. One active exit slot and one active proxy slot. Proposed policy: a newly authenticated connection replaces the old same-role session. Replacement closes the old session and its streams. Give each registration a generation ID; cleanup may clear a slot only if it still owns that generation. Never hold registry locks during network I/O.
+Use an in-memory registry, no database. One active exit slot and one active proxy slot. Approved policy: a newly authenticated connection replaces the old same-role session. Replacement closes the old session and its streams. Give each registration a generation ID; cleanup may clear a slot only if it still owns that generation. Never hold registry locks during network I/O.
 
 Relay accepts streams only from proxy sessions and opens streams only toward exits. Reject unexpected reverse streams; the exit must not be able to request website connections through the proxy. Closing a proxy connection closes its associated relay/exit streams, not the entire exit session.
 
@@ -79,7 +79,7 @@ Source inspected locally; these are candidates, not installed dependencies. Pin 
 
 **Proposed for review:** private CA and relay certificate, supplied as files. Dial the fixed relay IP while setting a separate TLS server name. A private-CA certificate may use the tested marker `en.zalando.de`; this is a routing/camouflage marker, not a claim of ownership, domain fronting, or use of Zalando infrastructure. Alternatively use an operator-owned hostname. Trust the private CA only in MHP, never install it as a browser/system-wide root. Verify normal certificate chain, name, and validity. Never copy netdiag's `InsecureSkipVerify` into MHP. No insecure fallback.
 
-Relay uses its own TCP/443 listener. **Deployment blocker:** confirm available IP/port before deployment; netdiag or other services may already own 443. Don't silently stop them. Integration with another listener is outside initial implementation.
+**Deployment confirmed:** relay will run in its own container as the sole service on a dedicated VPS in Germany; TCP/443 will be available. Actual IP is TBD deployment configuration, not an architecture blocker. This is not a deployment onto the existing shared LGA stack. No shared-listener integration is required.
 
 Separate high-entropy exit and proxy bearer tokens, carried only after verified TLS. Load secrets from role-specific files or environment, not CLI arguments; constant-time comparisons, no token logging. Local SOCKS has no authentication because it binds loopback only; other local users can use it, an accepted single-user-machine assumption requiring review.
 
@@ -98,7 +98,7 @@ No custom application records after this exchange: yamux owns framing and each s
 
 Both clients run `connect → verify TLS → authenticate → serve session → cleanup → backoff → retry` until process cancellation. Listen on localhost independently of proxy relay availability; close new browser connections promptly when disconnected.
 
-Proposed defaults (constants initially; tune only from evidence):
+Initial defaults accepted in review (constants initially; tune only from evidence):
 
 | Bound | Default |
 | --- | --- |
@@ -160,14 +160,7 @@ internal/stream/     net.Conn adapter and cancellation-aware duplex copy
 
 Transport owns TLS socket and mux session. Each stream handler owns its stream pair/destination connection. Constructors don't launch hidden goroutines; `Run(ctx)` methods own and join work. Main uses `signal.NotifyContext`; return errors rather than calling `os.Exit` from packages.
 
-Implementation sequence:
-
-1. CLI/logging, TLS/auth and reconnecting sessions; validate role rejection and shutdown.
-2. Session registry and stream bridge; exercise half-close/cancel behavior before integrating SOCKS.
-3. Exit SOCKS handler and proxy localhost listener; local full-topology HTTP/HTTPS test.
-4. Cross-build, BAT example, deployment instructions, then three manual acceptance checks.
-
-No production implementation in this documentation PR. Do not consider the design approved merely because this file exists.
+Implementation sequence and verification procedures are maintained in [tasks.md](tasks.md). No production implementation in this PR; TLS provisioning remains under review.
 
 ## Direct netdiag reuse references
 
@@ -180,31 +173,40 @@ Reference commit: [`2479bb06cccf688a0f43ebce7c4645511901f770`](https://github.co
 - [`internal/server/server.go`](https://github.com/rthomazel/netdiag/blob/2479bb06cccf688a0f43ebce7c4645511901f770/internal/server/server.go): listener ownership and shutdown patterns; MHP does not need its HTTPS control plane or SNI routing mux initially.
 - [`doc/deploy.md`](https://github.com/rthomazel/netdiag/blob/2479bb06cccf688a0f43ebce7c4645511901f770/doc/deploy.md): pure-Go Windows cross-build and manual launch approach.
 
-Copy/adapt small relevant helpers rather than importing another repo's `internal` packages. Check reuse permission/notices before copying: no tracked LICENSE was found in the inspected netdiag clone. Both repos are operator-owned; record authorization or add licensing clarification, don't assume a license.
+Copy/adapt small relevant helpers rather than importing another repo's `internal` packages. Thom explicitly authorized reuse of his netdiag code in PR #1. Preserve provenance and any third-party notices; no netdiag licensing blocker remains.
 
 Evidence: September 23 run passed real WG handshake inside TLS and failed native WG on three ports. This supports testing TLS transport; does not prove sustained proxy usability, DPI mechanism, or necessity of the marker SNI. No camouflage guarantee or JA3/JA4 evasion claim.
 
-## Minimum verification
+## Acceptance criteria
 
-Only three manual acceptance scenarios, plus focused automated checks needed to implement them safely:
-
-1. **Browse:** Firefox configured to localhost SOCKS5 loads HTTP and HTTPS pages with parallel resources. Controlled destination confirms Windows-side public egress, not relay IP. Test hostname and IP targets. No throughput benchmark.
-2. **Idle:** leave connected and unused for 10 minutes, then browse; no manual restart. Log whether original session survived or reconnect occurred.
-3. **Recover:** disconnect Windows Internet for 30 seconds and restore; repeat with relay restart. Requests during outage fail boundedly; new page loads recover automatically (target within 60s of network/server availability). Existing pages may need refresh.
-
-Automated: bounded auth records/version/role/wrong-token rejection, TLS trust/name rejection, CONNECT-only policy, EOF half-close and cancellation, generation-safe replacement, and one loopback full-topology HTTP/HTTPS integration test with forced exit reconnect. Cross-build Windows; `go test -race ./...`, `go vet ./...`, formatting and dependency vulnerability check. Tests use temporary CA/tokens, ephemeral ports and short injectable retry intervals. These are correctness checks, not an expanded resilience project.
+Browsing must exit through Windows, resume after idle, and recover automatically after network loss or relay restart. Existing flows may fail; new page loads must recover without process restarts. Detailed procedures and focused automated checks are in [tasks.md](tasks.md#verification).
 
 ## Review decisions and open questions
 
 Already agreed: names/topology, single binary with three modes, SOCKS5 browser interface, stdlib-first/reuse netdiag, debug files in cwd, manual BAT launch, retry forever, minimum tests, no concern about DNS placement or relay access to plaintext HTTP.
 
-Proposals awaiting review:
+### Decisions recorded from PR #1
 
-1. **TLS provisioning/SNI:** private CA + name verification; retain marker SNI initially or use operator-owned name? Who generates/distributes certificate and token files? No public CA issuance for a third-party hostname.
-2. **Destination policy:** recommend Internet-only destinations; reject loopback, private, link-local, multicast and unspecified IPs including IPv4-mapped IPv6. Resolve once and validate each concrete IP before dialing it to avoid DNS rebinding. Local tests need an explicit test-only exception. Allow TCP ports generally for browsing redirects; restrict to 80/443 only if desired. This is policy, not yet an approved restriction.
-3. **Session replacement:** new authenticated same-role session replaces old; confirm this beats rejecting duplicates for manual launches/reconnects.
-4. **Dependencies/stream design:** approve yamux + things-go SOCKS5, intact SOCKS forwarding, and the proposed timeout/limit defaults.
-5. **Deployment:** exact relay address and TCP/443 availability alongside netdiag/live services. Confirm endpoint ownership before any listener changes.
-6. **Reuse permission:** clarify netdiag licensing before copied code lands.
+- Destination policy approved: Internet-only TCP destinations; reject loopback, private, link-local, multicast and unspecified addresses, including IPv4-mapped IPv6. Resolve once and validate the actual IP before dialing; do not resolve again after validation. Local tests use an injected test-only exception. No 80/443-only port restriction.
+- New authenticated same-role session replaces old; generation-safe cleanup remains required.
+- Stream design and initial limits accepted; library choice delegated to the implementing agent. Select yamux and things-go/go-socks5 based on the source inspection above. Pin versions and validate the adapter before integration.
+- Dedicated relay container/VPS with available TCP/443 confirmed; IP TBD at deployment.
+- Netdiag reuse explicitly authorized by its owner.
 
-Pin exact dependency versions and verify adapter/deadline behavior in a small implementation spike before committing to APIs. Any incompatibility should update this plan rather than be papered over with unbounded waits or ad-hoc protocol changes. Windows service packaging, multiple exits, log rotation, and seamless flow recovery remain follow-ups, not blockers for this manual-launch version.
+### Still open: TLS provisioning
+
+The relay needs a certificate and private key for the chosen Go TLS transport, even if clients disable verification. Self-issuing is supported: generate a private CA and relay certificate, distribute only the CA public certificate to both clients, and keep the CA private key offline. Relay gets its leaf certificate/key, never the CA private key. Renewal under the same CA need not change client trust files.
+
+Let's Encrypt is an alternative for an operator-controlled hostname with domain validation and automated renewal. It cannot issue us a certificate for `en.zalando.de`. The ordinary verified-TLS path should use a matching operator-owned TLS name with that option; connecting directly to the fixed IP is still possible. Keep issuance/renewal outside the relay process initially.
+
+Copying netdiag's bare `InsecureSkipVerify` would encrypt traffic but not authenticate the relay. An active intermediary could impersonate it, steal the bearer tokens, read/modify plaintext HTTP and SOCKS destinations, and disrupt or redirect flows. Website HTTPS still has its independent browser certificate validation, but does not protect MHP tokens or all proxy metadata. A self-issued certificate with explicitly configured trust avoids that tradeoff; self-issued does not mean unverified.
+
+Recommendation remains private CA + verified relay certificate, with the tested SNI initially. Confirm that versus Let's Encrypt with an owned hostname, and who provisions/distributes the files. No trust-first-use or insecure fallback is proposed. Pinning could also authenticate a self-signed relay, but would add a separate verification/rotation path we do not need initially.
+
+Operational assumption to confirm: localhost SOCKS is unauthenticated and available to other local users. Separate role tokens protect relay access. Actual IP and credential delivery are deployment inputs, not reasons to add discovery or a database.
+
+Pin exact dependency versions and verify adapter/deadline behavior in a small implementation spike. If APIs require a design change, update the spec rather than introducing unbounded waits. Windows service packaging, multiple exits, log rotation and seamless flow recovery remain follow-ups.
+
+## Refs
+
+- PR: https://github.com/rthomazel/mhp/pull/1
