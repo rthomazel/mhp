@@ -26,7 +26,7 @@ appended on collision.
 
 ## Mode
 
-1. String value: relay, exit, or proxy.
+1. String value: relay, exit-node, or proxy.
 2. Flags is the set of flags required when running in this mode.
 3. IsMultiWorker is false: one process per role.
 
