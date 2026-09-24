@@ -1,5 +1,12 @@
-Package transport authenticates MHP clients to the relay over a private-CA TLS connection and opens a yamux session once authentication succeeds. It speaks a small JSON control record before handing framing to yamux.
-
-The package holds both halves of that handshake: Authenticator drives the client side (dial, handshake, hello/response, mux start), and the relay side (handshake.go, handshake.md) accepts a TLS connection, validates the presented bearer, replies with the verdict, and starts yamux only on success.
-
-The package owns only the TLS socket and the mux session. It trusts the relay CA (never InsecureSkipVerify), authenticates with a bearer token, and refuses to create a session before the relay accepts. Registration, stream pairing, and destination dialing live in the relay, proxy, and exit packages.
+// Package transport implements the relay-facing TLS handshake that authenticates
+// an MHP client before opening a yamux session.
+//
+// Auth is bearer-token based: the client presents a role-specific token after
+// the TLS handshake, the relay answers with a verdict, and only on success does
+// the relay start yamux. Framing is JSON-over-length-prefixed frames (see
+// framing.go); record shapes live in records.go.
+//
+// The client half (authenticator.go) drives the full dial→handshake→hello→mux
+// journey. The relay half (handshake.go) accepts a TLS connection, validates the
+// presented bearer, and starts yamux only on success.
+package transport

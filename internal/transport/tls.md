@@ -1,5 +1,9 @@
 Building and verifying TLS connections. Clients trust only the relay CA and present no client certificate; the relay presents its leaf and verifies no one. netdiag's InsecureSkipVerify is never set.
 
+# Constants
+
+DefaultMinTLSVersion = tls.VersionTLS13, the pinned minimum TLS version for both client and relay.
+
 # Vars
 
 ## ErrUntrustedCA = "transport: untrusted CA"
@@ -17,7 +21,7 @@ Returned when the client's -ca file cannot be parsed into a trust pool.
 
 # Functions
 
-## loadTrustPool(path string) (*x509.CertPool, error)
+## LoadTrustPool(path string) (*x509.CertPool, error)
 
 1. Read the PEM file at path.
 2. Append the contents to a fresh x509.CertPool.
@@ -34,7 +38,7 @@ Returned when the client's -ca file cannot be parsed into a trust pool.
 2. if the dial fails, return the wrapped error.
 3. Upgrade the connection to TLS using cfg, presenting ServerName and trusting RootCAs.
 4. if the handshake fails, return the wrapped error.
-5. set a HandshakeTimeout on the returned conn.
+5. clear the deadline so the mux owns the socket and inherits no setup budget.
 6. return the TLS conn and nil.
 
 #### Errors
@@ -42,7 +46,7 @@ Returned when the client's -ca file cannot be parsed into a trust pool.
 - **2.** if the dial fails, return the wrapped error.
 - **4.** if the handshake fails, return the wrapped error.
 
-## listenTLS(raw net.Conn, cfg TLSConfig, timing Timing) (net.Conn, error)
+## listenTLS(ctx Context, raw net.Conn, cfg TLSConfig, timing Timing) (net.Conn, error)
 
 1. Wrap raw in a *tls.Conn using cfg.
 2. set a HandshakeTimeout.

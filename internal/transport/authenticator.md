@@ -24,7 +24,7 @@ Returned when the underlying conn fails to close during teardown.
 
 ## ErrNilSession = "transport: nil session"
 
-Returned when mux is nil.
+Returned when the constructed session is nil.
 
 # Types
 
@@ -36,7 +36,7 @@ Returned when mux is nil.
 4. Timing Timing — connection and session timings.
 5. ServerName string — SNI the client presents and verifies.
 6. RootCAs *x509.CertPool — trusted relay CA, built from the client's -ca file.
-7. MinTLSVersion tls.Version — pinned to the newest stable TLS version Go ships.
+7. MinTLSVersion uint16 — pinned minimum TLS version, e.g. tls.VersionTLSxx.
 
 Constructors take no hidden goroutines; Run owns all lifecycle.
 
@@ -46,15 +46,12 @@ Constructors take no hidden goroutines; Run owns all lifecycle.
 
 1. Build the TLSConfig from a.ServerName, a.RootCAs, and a.MinTLSVersion.
 2. dialTLS(ctx, a.Addr, cfg, timing, dialer).
-3. if the dial fails, wrap as ErrDial.
-4. handshakeTLS(ctx, conn, timing).
-5. if the handshake fails, wrap as ErrHandshake.
-6. return conn and nil.
+3. return the conn or the wrapped error.
 
 #### Errors
 
-- **3.** if the dial fails, return ErrDial.
-- **5.** if the handshake fails, return ErrHandshake.
+- **2.** if the TCP connect fails, the error is wrapped as ErrDial.
+- **2.** if the TLS handshake fails, the error is wrapped as ErrHandshake.
 
 ## (a *Authenticator) exchange(ctx Context, conn net.Conn, timing Timing) (Response, error)
 
@@ -65,8 +62,9 @@ Constructors take no hidden goroutines; Run owns all lifecycle.
 5. if receiving fails, return the wrapped error.
 6. validateResponse(response).
 7. if validation fails, return the validation error.
-8. clear the deadline with conn.SetDeadline(time.Time{}); the mux now owns the socket and must not inherit the setup budget.
-9. return response and nil.
+8. if response.Status differs from statusCodeOK, return ErrAuthentication naming the relay's error code.
+9. clear the deadline with conn.SetDeadline(time.Time{}); the mux now owns the socket and must not inherit the setup budget.
+10. return response and nil.
 
 #### Errors
 
@@ -79,11 +77,11 @@ Constructors take no hidden goroutines; Run owns all lifecycle.
 1. conn, err := a.dial(ctx, a.Timing, dialer).
 2. if the dial fails, return the wrapped error.
 3. response, err := a.exchange(ctx, conn, a.Timing).
-4. if the exchange fails, return the wrapped error.
+4. if the exchange fails, close conn and return the wrapped error.
 5. mux, err := newClientSession(conn, a.Timing).
-6. if building the mux fails, return the wrapped error.
+6. if building the mux fails, close conn and return the wrapped error.
 7. session := newSession(conn, mux, a.Role, response.SessionID).
-8. if session is nil, return ErrNilSession.
+8. if session is nil, close mux and return ErrNilSession.
 9. log handshake complete with sessionID and role.
 10. return session and nil.
 
@@ -100,16 +98,15 @@ Constructors take no hidden goroutines; Run owns all lifecycle.
 2. if it succeeds, return the session and nil.
 3. if it fails, log the error and sleep a backoff.
 4. if the sleep completes before ctx is cancelled, attempt again.
-5. if ctx is cancelled, return nil.
-6. if all attempts fail, return ErrAuthentication.
+5. if ctx is cancelled, return ctx.Err().
 
 #### Errors
 
-- **6.** if every attempt fails, return ErrAuthentication.
+- **5.** if the context is cancelled, return ctx.Err().
 
 ## (a *Authenticator) backoff(attempt int) Duration
 
-1. Compute base = min_backoff << attempt.
-2. if base exceeds max_backoff, return max_backoff.
-3. add jitter proportional to attempt.
+1. Compute base = min_backoff << attempt, clamped to max_backoff.
+2. Add a constant random jitter bounded by min_backoff * jitter_ratio.
+3. Clamp the result to max_backoff.
 4. return base.

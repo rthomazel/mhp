@@ -40,9 +40,14 @@ A Session is the unit a handler serves. It carries exactly one role's worth of s
 
 ## (s *Session) Close() error
 
-1. Close Mux, which cascades a close to every owned stream.
-2. Close Closing exactly once, guarded by a sync.Once.
-3. return the mux close error.
+1. Close Closing exactly once, guarded by a sync.Once.
+2. Close Mux, which cascades a close to every owned stream.
+3. if closing the mux fails, return the error wrapped as ErrCloseFailed.
+4. return nil.
+
+Notes: the underlying Conn is closed transitively by closing the Mux, so the
+explicit Conn close is intentionally omitted. Closing it twice yields
+"use of closed network connection"; the mux is the sole owner of the socket.
 
 ## (s *Session) Done() <-chan struct{}
 

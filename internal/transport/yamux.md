@@ -1,31 +1,33 @@
 # Constants
 
-defaultMaxReceiveBytes = 65536, the yamux maximum received-unacked frame size.
-
 defaultMaxStreamBytes = 4194304, the yamux maximum per-stream window size.
+
+defaultStreamConcurrency = 64, the yamux accept backlog bounding inbound streams before the peer is throttled; the plan sets relay/exit/browser concurrency at 64.
 
 # Functions
 
+## buildSessionConfig(timing Timing) *yamux.Config
+
+1. Return a &yamux.Config with AcceptBacklog=defaultStreamConcurrency, EnableKeepAlive=true, KeepAliveInterval=timing.KeepAliveInterval, ConnectionWriteTimeout=timing.PingTimeout, MaxStreamWindowSize=defaultMaxStreamBytes, StreamOpenTimeout=timing.StreamOpenTimeout, StreamCloseTimeout=timing.DrainTimeout, LogOutput=io.Discard.
+
 ## newClientSession(conn net.Conn, timing Timing) (*yamux.Session, error)
 
-1. Build a yamux.Config with ClientMode=true, KeepAlive=timing.KeepAliveInterval, PingTimeout=timing.PingTimeout, DisableKeepalive=false, MaxReceiveBufferSize=defaultMaxReceiveBytes, MaxStreamWindowSize=defaultMaxStreamBytes.
-2. Call yamux.StartSession(conn, config).
-3. return the session and nil.
+1. Call yamux.Client(conn, buildSessionConfig(timing)).
+2. return the session or the wrapped error.
 
 #### Errors
 
-- **2.** if StartSession fails, return the wrapped error.
+- **1.** if the session start fails, return the wrapped error.
 
 ## newServerSession(conn net.Conn, timing Timing) (*yamux.Session, error)
 
-1. Build a yamux.Config identically to newClientSession but with ClientMode=false.
-2. Call yamux.StartSession.
-3. return the session and nil.
+1. Call yamux.Server(conn, buildSessionConfig(timing)).
+2. return the session or the wrapped error.
 
 #### Errors
 
-- **2.** if StartSession fails, return the wrapped error.
+- **1.** if the session start fails, return the wrapped error.
 
 # Notes
 
-yamux owns all framing and flow control from this point; no custom records travel on the session. Stream open is bounded externally: the adapter sets a StreamOpenTimeout deadline on each stream right after it is opened, because yamux has no native open deadline. The 64-stream concurrency cap is enforced by the session registry in the relay and exit packages, not here.
+yamux owns all framing and flow control from this point; no custom records travel on the session. Stream open is bounded externally via StreamOpenTimeout, because yamux has no native open deadline. The 64-stream concurrency cap is enforced by the session registry in the relay and exit packages, not here. AcceptBacklog doubles as the first line of defence against unbounded stream buildup.
