@@ -38,8 +38,8 @@ func TestNewSessionNilGuard(t *testing.T) {
 
 func TestOpenAcceptStream(t *testing.T) {
 	client, server := makePair(t)
-	defer client.Close()
-	defer server.Close()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
 
 	_, err := client.OpenStream()
 	if err != nil {
@@ -54,7 +54,7 @@ func TestOpenAcceptStream(t *testing.T) {
 
 func TestCloseCascadesToClosingChannel(t *testing.T) {
 	client, server := makePair(t)
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	if err := client.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -70,8 +70,8 @@ func TestCloseCascadesToClosingChannel(t *testing.T) {
 
 func TestUptimeAndHealthySince(t *testing.T) {
 	client, server := makePair(t)
-	defer client.Close()
-	defer server.Close()
+	defer func() { _ = client.Close() }()
+	defer func() { _ = server.Close() }()
 
 	if client.Uptime() < 0 {
 		t.Fatal("uptime must be non-negative")
