@@ -60,7 +60,7 @@ func TestBridgePairsStreams(t *testing.T) {
 		t.Fatalf("write on browser leg: %v", err)
 	}
 
-	exitStream.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = exitStream.SetReadDeadline(time.Now().Add(2 * time.Second))
 	got := make([]byte, len(payload))
 	n, err := exitStream.Read(got)
 	if err != nil {
@@ -87,9 +87,9 @@ func TestBridgeNoExitClosesStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("browser open stream: %v", err)
 	}
-	defer browserStream.Close()
+	defer func() { _ = browserStream.Close() }()
 
-	browserStream.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = browserStream.SetReadDeadline(time.Now().Add(2 * time.Second))
 	buf := make([]byte, 1)
 	_, err = browserStream.Read(buf)
 	if err == nil {
@@ -111,10 +111,10 @@ func TestBridgeRejectsReverseStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("exit open reverse stream: %v", err)
 	}
-	defer reverse.Close()
+	defer func() { _ = reverse.Close() }()
 
 	// ServeExit accepts and immediately closes it, so the exit sees EOF.
-	reverse.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = reverse.SetReadDeadline(time.Now().Add(2 * time.Second))
 	buf := make([]byte, 1)
 	_, err = reverse.Read(buf)
 	if err == nil {

@@ -37,13 +37,13 @@ func (a *Adapter) LocalAddr() net.Addr { return a.local }
 // Finish half-closes the stream's write side by sending a FIN. yamux's Close is
 // already a half-close, so Finish is a thin alias kept for readability and to
 // satisfy the Finisher contract Duplex relies on to preserve the read side.
-func (a *Adapter) Finish() error { return a.Stream.Close() }
+func (a *Adapter) Finish() error { return a.Close() }
 
 // ForceClose unblocks any read or write stalled on the stream and closes it
 // outright, unlike Finish which only releases the write side. It is used when a
 // fatal error or a cancelled session demands immediate teardown.
 func (a *Adapter) ForceClose() error {
 	// A past deadline makes a blocked Read/Write return at once.
-	_ = a.Stream.SetDeadline(time.Now().Add(-time.Second))
-	return a.Stream.Close()
+	_ = a.SetDeadline(time.Now().Add(-time.Second))
+	return a.Close()
 }

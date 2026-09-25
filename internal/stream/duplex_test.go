@@ -51,8 +51,8 @@ func TestDuplexCopiesBothDirections(t *testing.T) {
 	t.Run("outer to inner", func(t *testing.T) {
 		writeSide, dupA := net.Pipe()
 		dupB, readSide := net.Pipe()
-		defer dupA.Close()
-		defer dupB.Close()
+		defer func() { _ = dupA.Close() }()
+		defer func() { _ = dupB.Close() }()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -69,8 +69,8 @@ func TestDuplexCopiesBothDirections(t *testing.T) {
 	t.Run("inner to outer", func(t *testing.T) {
 		writeSide, dupA := net.Pipe()
 		dupB, readSide := net.Pipe()
-		defer dupA.Close()
-		defer dupB.Close()
+		defer func() { _ = dupA.Close() }()
+		defer func() { _ = dupB.Close() }()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -90,10 +90,10 @@ func TestDuplexCopiesBothDirections(t *testing.T) {
 func TestDuplexCancelForcesClose(t *testing.T) {
 	inInner, inOuter := net.Pipe()
 	outInner, outOuter := net.Pipe()
-	defer inInner.Close()
-	defer outInner.Close()
-	defer inOuter.Close()
-	defer outOuter.Close()
+	defer func() { _ = inInner.Close() }()
+	defer func() { _ = outInner.Close() }()
+	defer func() { _ = inOuter.Close() }()
+	defer func() { _ = outOuter.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
