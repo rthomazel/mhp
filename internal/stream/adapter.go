@@ -39,6 +39,12 @@ func (a *Adapter) LocalAddr() net.Addr { return a.local }
 // satisfy the Finisher contract Duplex relies on to preserve the read side.
 func (a *Adapter) Finish() error { return a.Close() }
 
+// CloseWrite is the half-close the SOCKS5 forwarding path expects from a
+// destination-backed net.Conn. yamux treats Close as a FIN-style half-close
+// (release the write side, keep reading), so CloseWrite is an alias kept for
+// the interface shape the SOCKS library asserts on.
+func (a *Adapter) CloseWrite() error { return a.Close() }
+
 // ForceClose unblocks any read or write stalled on the stream and closes it
 // outright, unlike Finish which only releases the write side. It is used when a
 // fatal error or a cancelled session demands immediate teardown.

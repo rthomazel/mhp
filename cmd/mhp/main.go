@@ -10,15 +10,22 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/rthomazel/mhp/internal/config"
+	"github.com/rthomazel/mhp/internal/exit"
 	"github.com/rthomazel/mhp/internal/logging"
+	"github.com/rthomazel/mhp/internal/proxy"
+	"github.com/rthomazel/mhp/internal/relay"
+	"github.com/rthomazel/mhp/internal/transport"
 )
 
 // process exit codes, mapped from the error contract. Task 1 only ever
@@ -99,19 +106,177 @@ func parseFlags(argv []string) (config.ParsedFlags, error) {
 	}, nil
 }
 
-// runMode awaits cancellation, logging readiness and shutdown. All three
-// modes share this stub body in task 1; tasks 2-5 give each its own runner.
+// runMode dispatches to the runner for the configured mode, logs readiness
+// and shutdown, and maps a cancelled context to a clean exit. Startup failures
+// (bad certificate, unlistenable address) return an error that run translates
+// into a non-zero process exit; a context cancellation is not a failure and
+// yields nil. A missing/unreadable CA is non-fatal (see runExit/runProxy).
 func runMode(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
 	logger.Slog.Log(ctx, slog.LevelInfo, "starting",
 		"mode", cfg.Mode.String(),
 		"listen", cfg.Listen,
 		"relay", cfg.Relay,
 	)
-	<-ctx.Done()
+
+	var err error
+	switch cfg.Mode {
+	case config.ModeRelay:
+		err = runRelay(ctx, cfg, logger)
+	case config.ModeExit:
+		err = runExit(ctx, cfg, logger)
+	case config.ModeProxy:
+		err = runProxy(ctx, cfg, logger)
+	default:
+		err = fmt.Errorf("unsupported mode %q", cfg.Mode)
+	}
+
 	logger.Slog.Log(ctx, slog.LevelInfo, "shutdown",
 		"reason", reason(ctx.Err()),
 	)
-	return nil
+
+	// A cancelled context is a clean shutdown, not a failure: swallow the
+	// runner's context error so main maps this to exit 0.
+	if err != nil && ctx.Err() != nil {
+		return nil
+	}
+	return err
+}
+
+// runRelay is the relay role. It listens for exit and proxy clients on Listen,
+// authenticates each through the transport handshake, and hands the resulting
+// session to the relay Service. It blocks until the context is cancelled or the
+// listener stops, then returns.
+func runRelay(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
+	// The relay presents its own leaf certificate; it never trusts a client CA.
+	cert, err := tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
+	if err != nil {
+		return fmt.Errorf("load relay certificate: %w", err)
+	}
+
+	handshake := &transport.Handshake{
+		TLSConfig: transport.TLSConfig{
+			Certificate:   cert,
+			MinTLSVersion: transport.DefaultMinTLSVersion,
+		},
+		Timing: transport.DefaultTiming,
+		Logger: logger.Slog,
+		// Trust only the exit and proxy bearers the operator provisioned.
+		Verifier: transport.Verifier{
+			ExpectedExits: map[config.Mode]string{
+				config.ModeExit:  string(cfg.ExitToken.Value()),
+				config.ModeProxy: string(cfg.ProxyToken.Value()),
+			},
+		},
+	}
+
+	service := relay.NewService(handshake, logger.Slog)
+
+	ln, err := net.Listen("tcp", cfg.Listen)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", cfg.Listen, err)
+	}
+	defer ln.Close()
+
+	logger.Slog.Log(ctx, slog.LevelInfo, "relay listening",
+		"address", ln.Addr().String(),
+	)
+
+	// The relay owns the listener's lifecycle inside Run.
+	return service.Run(ctx, ln)
+}
+
+// runExit is the exit-node role. It connects to the relay as a client, keeps
+// re-authenticating forever across outages, and serves the browser's SOCKS5
+// requests on each relay-opened stream so traffic exits through this host.
+//
+// The connector authenticates in the background (reconnecting forever); the
+// broker consumes whatever session the connector currently publishes. On
+// shutdown both wind down: the broker returns when the context is cancelled,
+// the connector returns when it observes the same cancellation, and we join it.
+func runExit(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
+	// A missing or unreadable CA is non-fatal: the connector retries forever,
+	// so corrected provisioning recovers without a process restart. Log and
+	// continue so a cancelled context can still unwind cleanly below.
+	rootCAs, err := transport.LoadTrustPool(cfg.CAPath)
+	if err != nil {
+		logger.Slog.Warn("exit: trust pool unavailable, retrying on reconnect",
+			"ca_path", cfg.CAPath, "error", err)
+	}
+
+	authenticator := transport.Authenticator{
+		Addr:          cfg.Relay,
+		Role:          config.ModeExit,
+		Token:         string(cfg.Token.Value()),
+		Timing:        transport.DefaultTiming,
+		ServerName:    cfg.TLSName,
+		RootCAs:       rootCAs,
+		MinTLSVersion: transport.DefaultMinTLSVersion,
+	}
+
+	connector := transport.NewConnector(authenticator, logger.Slog, nil)
+	handler := exit.New(exit.Options{Logger: logger.Slog})
+	broker := exit.NewBroker(connector, handler, logger.Slog)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = connector.Run(ctx)
+	}()
+
+	err = broker.Run(ctx)
+	wg.Wait()
+	return err
+}
+
+// runProxy is the proxy role. It listens on a loopback address (validated by
+// config.Load) and forwards each browser connection intact into the current
+// relay session, which carries it to the exit. Like the exit runner it runs the
+// connector in the background and consumes sessions in the foreground.
+func runProxy(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
+	// A missing or unreadable CA is non-fatal: the connector retries forever,
+	// so corrected provisioning recovers without a process restart. Log and
+	// continue so a cancelled context can still unwind cleanly below.
+	rootCAs, err := transport.LoadTrustPool(cfg.CAPath)
+	if err != nil {
+		logger.Slog.Warn("proxy: trust pool unavailable, retrying on reconnect",
+			"ca_path", cfg.CAPath, "error", err)
+	}
+
+	authenticator := transport.Authenticator{
+		Addr:          cfg.Relay,
+		Role:          config.ModeProxy,
+		Token:         string(cfg.Token.Value()),
+		Timing:        transport.DefaultTiming,
+		ServerName:    cfg.TLSName,
+		RootCAs:       rootCAs,
+		MinTLSVersion: transport.DefaultMinTLSVersion,
+	}
+
+	connector := transport.NewConnector(authenticator, logger.Slog, nil)
+
+	ln, err := net.Listen("tcp", cfg.Listen)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", cfg.Listen, err)
+	}
+	defer ln.Close()
+
+	logger.Slog.Log(ctx, slog.LevelInfo, "proxy listening",
+		"address", ln.Addr().String(),
+	)
+
+	listener := proxy.New(ln, connector, logger.Slog, proxy.MaxPending)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = connector.Run(ctx)
+	}()
+
+	err = listener.Run(ctx)
+	wg.Wait()
+	return err
 }
 
 // reason maps a context error to a human-readable reason. A nil error (the
