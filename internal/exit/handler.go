@@ -68,6 +68,11 @@ type Handler struct {
 // New returns a Handler ready to serve SOCKS5 over relay streams.
 func New(opts Options) *Handler {
 	opts.defaults()
+	// Match the relay's NewBridge: a nil logger falls back to the default so
+	// debug/error calls never panic. Tests inject a nil logger on purpose.
+	if opts.Logger == nil {
+		opts.Logger = slog.Default()
+	}
 	return &Handler{opts: opts, pol: newPolicy()}
 }
 
@@ -148,6 +153,13 @@ func (h *Handler) handleConnect(sessionCtx, setupCtx context.Context, writer net
 		_ = target.Close()
 		return fmt.Errorf("exit: send reply: %w", err)
 	}
+
+	// Debug: record the destination the browser asked for and the address it
+	// actually exited through, so a debug file can confirm egress origin.
+	h.opts.Logger.Debug("exit: socks connect ok",
+		"destination", net.JoinHostPort(ip.String(), strconv.Itoa(dest.Port)),
+		"egress_addr", target.LocalAddr(),
+	)
 
 	// CONNECT succeeded: the setup budget has done its job. Drop it. Subsequent
 	// browsing data rides sessionCtx only, so it is never truncated by a short
