@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/yamux"
 
@@ -99,6 +101,24 @@ func (b *Bridge) ServeExit(ctx context.Context, exit *yamux.Session) error {
 	}
 }
 
+// counterConn wraps a net.Conn and tallies the bytes written to it, letting the
+// relay report per-direction traffic in debug without changing Duplex's
+// half-close contract. Only the write direction is counted; reads pass through.
+type counterConn struct {
+	net.Conn
+	n int64
+}
+
+// Write records bytes handed downstream before forwarding them.
+func (c *counterConn) Write(p []byte) (int, error) {
+	written, err := c.Conn.Write(p)
+	c.n += int64(written)
+	return written, err
+}
+
+// bytes returns the total bytes written through the wrapper.
+func (c *counterConn) bytes() int64 { return c.n }
+
 // launch wires a single proxy↔exit pair, honoring the active-stream ceiling
 // before spawning any work.
 func (b *Bridge) launch(parent context.Context, proxySession, exitSession *yamux.Session, proxy, exit *yamux.Stream) {
@@ -133,6 +153,16 @@ func (b *Bridge) launch(parent context.Context, proxySession, exitSession *yamux
 
 	go func() {
 		defer b.track(id, cancel)
+
+		// Debug: mark the pairing start so a flow can be correlated across the
+		// relay, and tally bytes per direction so the debug file shows traffic
+		// actually traversed the pair.
+		start := time.Now()
+		b.logger.Debug("relay: bridging proxy stream",
+			"proxy_stream", id,
+			"exit_stream", exit.StreamID(),
+		)
+
 		// The adapter supplies the addresses yamux streams omit so Duplex has
 		// real net.Conns to bridge. Finish is the half-close (FIN) path; the
 		// forced-close path is handled by Duplex when a direction stalls.
@@ -142,10 +172,23 @@ func (b *Bridge) launch(parent context.Context, proxySession, exitSession *yamux
 		exitConn := stream.NewAdapter(exit,
 			stream.NewStreamAddr("tcp", "exit"),
 			stream.NewStreamAddr("tcp", "proxy"))
-		dup := stream.NewDuplex(proxyConn, exitConn)
+
+		// Counters wrap each side so we can report bytes copied per direction
+		// without disturbing the half-close Duplex relies on. Each counter is
+		// written by exactly one copy goroutine, so its tally is race-free.
+		countedProxy := &counterConn{Conn: proxyConn}
+		countedExit := &counterConn{Conn: exitConn}
+		dup := stream.NewDuplex(countedProxy, countedExit)
 		if err := dup.Run(child); err != nil && !errors.Is(err, context.Canceled) {
 			b.logger.Error("relay: bridge copy failed", "error", err)
 		}
+		b.logger.Debug("relay: bridge pair ended",
+			"proxy_stream", id,
+			"exit_stream", exit.StreamID(),
+			"elapsed_ms", time.Since(start).Milliseconds(),
+			"bytes_proxy_to_exit", countedExit.bytes(),
+			"bytes_exit_to_proxy", countedProxy.bytes(),
+		)
 	}()
 }
 

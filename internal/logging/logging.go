@@ -68,7 +68,15 @@ func NewSetup(mode string, debug bool, cwd string) (*Logger, error) {
 		w = io.MultiWriter(os.Stdout, file)
 		closer = fileCloser(file)
 	}
-	base := slog.NewTextHandler(w, nil)
+
+	// -debug enables the debug file, but it must also lift the logger level so
+	// every .Debug() call across the binary actually surfaces. Without this the
+	// flag only opens a file and swallows the telemetry it is supposed to carry.
+	level := slog.LevelInfo
+	if debug {
+		level = slog.LevelDebug
+	}
+	base := slog.NewTextHandler(w, &slog.HandlerOptions{Level: level})
 	handler := newRedactingHandler(base)
 	handler.RegisterSensitive("token", "exit_token", "proxy_token", "tls_key", "payload")
 	if closer == nil {

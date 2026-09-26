@@ -109,6 +109,29 @@ Pass: page loads without process restart. Background browser traffic may prevent
 
 Pass: outage requests fail within implemented deadlines; new page loads recover automatically. Existing flows are allowed to fail and must not be replayed. Stop all modes and confirm clean exit at the end.
 
+## Local testing (Merlin, 2026-09-26)
+
+Smoke-tested locally with a private CA + role tokens. Three roles run on
+localhost (relay :1443, proxy SOCKS5 :1080, exit). Findings (no checkmarks
+below were added intentionally — QA is Thom's):
+
+- Build/vet/all unit tests (incl. `-race`) pass.
+- Full byte pipeline verified end-to-end: `python3 browse.py <dest> 80 /` routed
+  through proxy -> relay -> exit returned a real Cloudflare 301 from `1.1.1.1`.
+- Debug instrumentation now emits what the plan calls for: relay logs
+  `bridging proxy stream` / `bridge pair ended` with `elapsed_ms` and
+  `bytes_*`; exit logs `socks connect ok` with the observed `egress_addr`
+  (confirmed egress originates at the exit, e.g. `172.18.0.12:...`, never the
+  relay). This proves the `-debug` level fix in `internal/logging` is effective.
+- The relay 10s copy deadline is observable in debug: a stalled second request
+  ended at `elapsed_ms=10000`, confirming the half-close/deadline wiring.
+
+Caveat for QA on THIS box (environment, not a code bug): it resolves
+`example.com` to IPv6 first and has no working IPv6 egress, so the exit's
+dial on the first-resolved address hangs. Literal IPv4 destinations
+(e.g. `1.1.1.1`) bypass the resolver and work. A normal Windows/browser
+QA environment should not hit this.
+
 ## Refs
 
 - spec: [2026-09-23-mhp-plan](plan.md)

@@ -115,6 +115,12 @@ func (l *Listener) serve(ctx context.Context, conn net.Conn) {
 		return
 	}
 
+	// Debug: mark the start of a browser flow so the debug file shows the proxy
+	// accepting real client connections and reaching the relay.
+	l.logger.Debug("proxy: opened relay stream",
+		"proxy_peer", conn.RemoteAddr().String(),
+	)
+
 	// Duplex ties the bridge's lifetime to the session: when the session ends
 	// or ctx is cancelled the copy unwinds, so a relay outage tears down the
 	// browser flow without leaking the goroutine.
