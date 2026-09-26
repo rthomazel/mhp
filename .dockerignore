@@ -1,0 +1,14 @@
+# Never let secrets, VCS metadata, or unrelated files into the relay build.
+# Build context is the repo root (see deploy/relay/compose.yml).
+.git
+.gitignore
+deploy/relay/credentials/
+*.key
+*.csr
+*.srl
+*.token
+*.exe
+mhp-linux-amd64
+mhp-windows-amd64.exe
+dist/
+out/

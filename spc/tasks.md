@@ -71,11 +71,13 @@ Done when: a local integration test fetches HTTP and HTTPS through all roles, fo
 
 Depends on task 4.
 
-- [ ] Cross-build Windows amd64 with `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/mhp` and build Linux relay.
-- [ ] Add manual BAT example with `cd /d "%~dp0"`, explicit config file paths and optional `-debug`. Explain console lifetime, Ctrl+C and retry behavior. No service installer.
-- [ ] Add dedicated relay container instructions, publish TCP/443 on the assigned VPS, mount credentials read-only, use slim Debian runtime and container restart policy. Keep certificates persistent across container replacement; no credentials baked into images.
-- [ ] Document Firefox SOCKS5 localhost settings, optional proxy DNS and TCP-only scope. Actual relay IP remains a deployment input supplied by Thom.
+- [x] Cross-build Windows amd64 with `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/mhp` and build Linux relay.
+- [x] Add manual BAT example with `cd /d "%~dp0"`, explicit config file paths and optional `-debug`. Explain console lifetime, Ctrl+C and retry behavior. No service installer.
+- [x] Add dedicated relay container instructions, publish TCP/443 on the assigned VPS, mount credentials read-only, use slim Debian runtime and container restart policy. Keep certificates persistent across container replacement; no credentials baked into images.
+- [x] Document Firefox SOCKS5 localhost settings, optional proxy DNS and TCP-only scope. Actual relay IP remains a deployment input supplied by Thom.
 - [ ] Run verification below and record commit/build versions, sanitized logs and outcomes.
+
+Deliverables: `docs/DEPLOYMENT.md` (full runbook), `deploy/relay/{Dockerfile,compose.yml,.dockerignore,init_credentials.sh,credentials/README.md}`, `deploy/windows/{exit,proxy}.bat`, `scripts/generate_certs.sh` (certs + role tokens). Verified: `go build ./...`, `go vet ./...`, `go test -race ./...`, and the Windows cross-build all pass from commit `192aef2`.
 
 References: [launch/interface](plan.md#cli-debug-output-and-windows-launch), [deployment agreement](plan.md#tls-authentication-and-initial-wire-exchange), netdiag [cross-build/deployment](https://github.com/rthomazel/netdiag/blob/2479bb06cccf688a0f43ebce7c4645511901f770/doc/deploy.md).
 
