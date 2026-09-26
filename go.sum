@@ -1,2 +1,4 @@
 github.com/hashicorp/yamux v0.1.2 h1:XtB8kyFOyHXYVFnwT5C3+Bdo8gArse7j2AQ0DA0Uey8=
 github.com/hashicorp/yamux v0.1.2/go.mod h1:C+zze2n6e/7wshOZep2A70/aQU6QBRWJO/G6FT1wIns=
+github.com/things-go/go-socks5 v0.1.4-0.20260917235559-9fd5240192b7 h1:Tk2iF80pBYbO8EoIeX8+22V6E/oNYOvwPdgemNu19ng=
+github.com/things-go/go-socks5 v0.1.4-0.20260917235559-9fd5240192b7/go.mod h1:LZ99kKdQKnpwKv9P1Ilowna9cafg3cmYB/Dr1iagwDg=
