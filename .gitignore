@@ -1,0 +1,24 @@
+# Cross-compiled build artifacts.
+/mhp.exe
+/mhp-linux-amd64
+/mhp-windows-amd64.exe
+/dist/
+/out/
+
+# Credentials and keys. Security-critical: never commit keys, tokens,
+# CSRs, or the CA serial. The relay client material lives under
+# deploy/relay/credentials and is intentionally excluded wholesale.
+deploy/relay/credentials/
+*.key
+*.csr
+*.srl
+*.token
+
+# Runtime debug files (may reveal destinations).
+mhp-debug-*.txt
+
+# Editor / OS noise.
+.DS_Store
+*.swp
+*.swo
+__pycache__/

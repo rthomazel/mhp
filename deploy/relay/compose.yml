@@ -1,0 +1,38 @@
+# Standalone compose for the MHP relay on its dedicated VPS (Hetzner, Germany).
+#
+# The relay is the ONLY service on this VPS, so there is no shared-listener
+# integration and no host-network coupling to manage. It owns TCP/443 directly
+# (runs as root inside the container, so no CAP_NET_BIND_SERVICE is required).
+#
+# From deploy/relay on the VPS:
+#   ./init_credentials.sh
+#   docker compose -f compose.yml up -d --build
+#
+# The LGA VPS network blocks proxy.golang.org; pass the mirror via ARG.
+name: mhp-relay
+
+services:
+  relay:
+    build:
+      context: ../../
+      dockerfile: deploy/relay/Dockerfile
+      args:
+        # The VPS network blocks proxy.golang.org; goproxy.cn works there.
+        GOPROXY: https://goproxy.cn,direct
+    image: mhp-relay:latest
+    container_name: mhp-relay
+
+    # Run as root to bind TCP/443 inside the container.
+    user: "0:0"
+
+    # Publish host TCP/443 onto container :443. Clients dial <relay-ip>:443.
+    ports:
+      - "443:443"
+
+    # Credentials persist on the host, so they survive container recreation.
+    # Mounted read-only; the relay only needs to read them.
+    volumes:
+      - ./credentials:/credentials:ro
+
+    # Recover automatically across network blips, VPS reboots, and crashes.
+    restart: unless-stopped
