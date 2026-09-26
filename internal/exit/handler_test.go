@@ -34,7 +34,7 @@ func (d *tcpFakeDialer) DialContext(ctx context.Context, network, addr string) (
 		for {
 			n, err := srv.Read(buf)
 			if n > 0 {
-				srv.Write(buf[:n])
+				_, _ = srv.Write(buf[:n])
 			}
 			if err != nil {
 				_ = srv.Close()
@@ -109,7 +109,7 @@ func serveHandler(t *testing.T, h *Handler) (client net.Conn, done chan error, a
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	t.Cleanup(func() { ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() })
 	done = make(chan error, 1)
 	go func() {
 		conn, err := ln.Accept()
@@ -133,7 +133,7 @@ func TestHandlerAccessDenied(t *testing.T) {
 	h := New(Options{Logger: nil, Dialer: rec})
 
 	client, done, _ := serveHandler(t, h)
-	t.Cleanup(func() { client.Close() })
+	t.Cleanup(func() { _ = client.Close() })
 	cli := &socksClient{conn: client}
 
 	if err := cli.negotiate(0x00); err != nil {
@@ -168,7 +168,7 @@ func TestHandlerNonConnectRejected(t *testing.T) {
 	h := New(Options{Logger: nil, Dialer: rec})
 
 	client, done, _ := serveHandler(t, h)
-	t.Cleanup(func() { client.Close() })
+	t.Cleanup(func() { _ = client.Close() })
 	cli := &socksClient{conn: client}
 
 	if err := cli.negotiate(0x00); err != nil {
@@ -204,7 +204,7 @@ func TestHandlerSuccessfulDial(t *testing.T) {
 	h := New(Options{Logger: nil, Dialer: rec})
 
 	client, done, _ := serveHandler(t, h)
-	t.Cleanup(func() { client.Close() })
+	t.Cleanup(func() { _ = client.Close() })
 	cli := &socksClient{conn: client}
 
 	if err := cli.negotiate(0x00); err != nil {

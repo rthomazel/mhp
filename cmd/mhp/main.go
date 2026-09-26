@@ -175,7 +175,7 @@ func runRelay(ctx context.Context, cfg config.Config, logger *logging.Logger) er
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.Listen, err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	logger.Slog.Log(ctx, slog.LevelInfo, "relay listening",
 		"address", ln.Addr().String(),
@@ -259,13 +259,13 @@ func runProxy(ctx context.Context, cfg config.Config, logger *logging.Logger) er
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.Listen, err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	logger.Slog.Log(ctx, slog.LevelInfo, "proxy listening",
 		"address", ln.Addr().String(),
 	)
 
-	listener := proxy.New(ln, connector, logger.Slog, proxy.MaxPending)
+	listener := proxy.New(ln, connector, logger.Slog)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

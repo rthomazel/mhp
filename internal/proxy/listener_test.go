@@ -132,9 +132,9 @@ func TestProxyWithSessionKeepsConnectionOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("proxy listen: %v", err)
 	}
-	defer proxyLn.Close()
+	defer func() { _ = proxyLn.Close() }()
 
-	ln := New(proxyLn, conn, quietLogger(), MaxPending)
+	ln := New(proxyLn, conn, quietLogger())
 	if got := ln.ListenAddr(); got == nil {
 		t.Fatal("ListenAddr returned nil")
 	}
@@ -148,12 +148,12 @@ func TestProxyWithSessionKeepsConnectionOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("browser dial: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if _, err := client.Write([]byte("hello")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	client.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	_ = client.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
 	if _, err := client.Read(make([]byte, 1)); err == nil {
 		t.Fatal("expected open (bridged) connection to time out on read")
 	}
@@ -190,8 +190,8 @@ func TestProxyNoSessionClosesPromptly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("proxy listen: %v", err)
 	}
-	defer proxyLn.Close()
-	ln := New(proxyLn, conn, quietLogger(), MaxPending)
+	defer func() { _ = proxyLn.Close() }()
+	ln := New(proxyLn, conn, quietLogger())
 
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
@@ -202,9 +202,9 @@ func TestProxyNoSessionClosesPromptly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("browser dial: %v", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
-	client.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = client.SetReadDeadline(time.Now().Add(2 * time.Second))
 	if _, err := client.Read(make([]byte, 1)); err == nil {
 		t.Fatal("expected closed connection, got no error")
 	}

@@ -38,15 +38,11 @@ type Listener struct {
 }
 
 // New returns a Listener that accepts on ln and bridges into the connector's
-// current session. maxPending bounds how many browser connections may be
-// bridged at once; it is clamped to a sane floor so a misconfigured value
-// cannot turn the admission gate into a busy spin.
-func New(ln net.Listener, connector *transport.Connector, logger *slog.Logger, maxPending int) *Listener {
+// current session. The admission capacity is fixed at MaxPending; passing a
+// value here is unnecessary because the semaphore is sized at construction.
+func New(ln net.Listener, connector *transport.Connector, logger *slog.Logger) *Listener {
 	if logger == nil {
 		logger = slog.Default()
-	}
-	if maxPending < 1 {
-		maxPending = 1
 	}
 	return &Listener{
 		ln:        ln,
@@ -94,7 +90,7 @@ func (l *Listener) Run(ctx context.Context) error {
 // semaphore, snapshots the current session, opens one relay stream, and
 // duplex-copies until either side finishes or the session ends.
 func (l *Listener) serve(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Non-blocking admission: if the proxy is already bridging at capacity,
 	// close this connection immediately rather than letting the accept loop
