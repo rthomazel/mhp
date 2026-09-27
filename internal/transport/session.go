@@ -33,7 +33,7 @@ func newSession(conn net.Conn, mux *yamux.Session, role Mode, sessionID string) 
 	if conn == nil || mux == nil {
 		return nil
 	}
-	return &Session{
+	s := &Session{
 		ID:        sessionID,
 		Conn:      conn,
 		Mux:       mux,
@@ -41,6 +41,15 @@ func newSession(conn net.Conn, mux *yamux.Session, role Mode, sessionID string) 
 		closing:   make(chan struct{}),
 		startedAt: time.Now(),
 	}
+	// Mirror yamux's own session-end signal so observers of Done() learn about a
+	// peer-initiated teardown (keepalive timeout, network drop) even when Close()
+	// was never called. Guarded by closeOnce so it never races the explicit-close
+	// path and never double-closes the channel.
+	go func() {
+		<-mux.CloseChan()
+		s.closeOnce.Do(func() { close(s.closing) })
+	}()
+	return s
 }
 
 // OpenStream opens a new stream on the session.
