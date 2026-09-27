@@ -23,7 +23,10 @@ type Timing struct {
 	// session. It is cleared before the mux owns the socket so it never
 	// poisons stream reads and writes.
 	SetupTimeout time.Duration
-	// KeepAliveInterval is the yamux probe cadence on an idle session.
+	// KeepAliveInterval is the yamux probe cadence on an idle session. Kept
+	// well under the NAT idle timeout of the outbound client connections so the
+	// probes both keep the socket warm and detect a NAT-expired peer quickly.
+	// Tune from evidence if a deployment's NAT table has a shorter idle window.
 	KeepAliveInterval time.Duration
 	// PingTimeout is yamux tolerance for an unanswered probe before the
 	// session is judged dead.
@@ -48,8 +51,8 @@ var DefaultTiming = Timing{
 	DialTimeout:       10 * time.Second,
 	HandshakeTimeout:  10 * time.Second,
 	SetupTimeout:      10 * time.Second,
-	KeepAliveInterval: 15 * time.Second,
-	PingTimeout:       10 * time.Second,
+	KeepAliveInterval: 5 * time.Second,
+	PingTimeout:       5 * time.Second,
 	StreamOpenTimeout: 10 * time.Second,
 	DrainTimeout:      30 * time.Second,
 	MinBackoff:        1 * time.Second,
