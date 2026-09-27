@@ -143,10 +143,13 @@ func (b *Bridge) launch(parent context.Context, proxySession, exitSession *yamux
 	go func() {
 		select {
 		case <-proxySession.CloseChan():
+			b.logger.Debug("relay: proxy session closechan triggered teardown")
 			cancel()
 		case <-exitSession.CloseChan():
+			b.logger.Debug("relay: exit session closechan triggered teardown")
 			cancel()
 		case <-parent.Done():
+			b.logger.Debug("relay: parent context cancelled teardown")
 			cancel()
 		}
 	}()

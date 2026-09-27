@@ -91,6 +91,8 @@ func (s socksLogger) Errorf(format string, a ...any) {
 // session and setup contexts, then serves the browser's request on conn. It is
 // called once per accepted relay stream.
 func (h *Handler) ServeConn(sessionCtx context.Context, conn net.Conn) error {
+	h.opts.Logger.Debug("exit: serving SOCKS stream")
+
 	setupCtx, cancel := context.WithTimeout(sessionCtx, h.opts.SetupTimeout)
 	defer cancel()
 
