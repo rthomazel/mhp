@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CREDS_DIR="$SCRIPT_DIR/credentials"
 
 mkdir -p "$CREDS_DIR"
-"$SCRIPT_DIR/../scripts/generate_certs.sh" "$CREDS_DIR"
+"$SCRIPT_DIR/../../scripts/generate_certs.sh" "$CREDS_DIR"
 
 echo
 echo "Credentials ready in $CREDS_DIR. Next:"
