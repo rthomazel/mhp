@@ -79,6 +79,7 @@ func (c *Connector) clearIf(cur *LinkedSession) {
 // context so its workers unwind.
 func (c *Connector) Run(parent context.Context) error {
 	backoff := c.auth.Timing.MinBackoff
+	firstEstablishment := true
 	for {
 		link, err := c.connect(parent)
 		if err != nil {
@@ -95,12 +96,24 @@ func (c *Connector) Run(parent context.Context) error {
 		}
 
 		c.current.Store(link)
-		c.logger.Info("session established",
-			"role", string(c.auth.Role), "session_id", link.Session.ID)
+		if firstEstablishment {
+			c.logger.Info("session established",
+				"role", string(c.auth.Role), "session_id", link.Session.ID)
+			firstEstablishment = false
+		} else {
+			// Distinguish a recovery from the initial establishment so a reconnect
+			// is unmistakable in the debug log.
+			c.logger.Info("reconnect: session re-established",
+				"role", string(c.auth.Role), "session_id", link.Session.ID)
+		}
 
 		if err := c.serve(parent, link); err != nil {
 			return err
 		}
+		// serve returned nil: the session ended on its own (peer teardown, e.g. a
+		// NAT entry expiring). Log it explicitly so recovery is visible, then loop
+		// back and reconnect.
+		c.logger.Info("reconnect: session ended, reconnecting")
 		c.clearIf(link)
 
 		// Reset the backoff floor only if the session proved healthy for
