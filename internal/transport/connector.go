@@ -96,15 +96,31 @@ func (c *Connector) Run(parent context.Context) error {
 		}
 
 		c.current.Store(link)
+		// Log the effective keepalive/ping/backoff timings alongside establishment
+		// so operators can confirm the deployed binary is probing frequently enough
+		// to detect a NAT-expired peer. These are the knobs behind proactive
+		// (request-independent) recovery, so printing them at runtime is cheaper
+		// than grepping a stale build for the values it actually used.
+		timingFields := []any{
+			"keepalive_interval", c.auth.Timing.KeepAliveInterval,
+			"ping_timeout", c.auth.Timing.PingTimeout,
+			"healthy_window", c.auth.Timing.HealthyWindow,
+			"backoff_floor", c.auth.Timing.MinBackoff,
+			"backoff_ceiling", c.auth.Timing.MaxBackoff,
+		}
 		if firstEstablishment {
 			c.logger.Info("session established",
-				"role", string(c.auth.Role), "session_id", link.Session.ID)
+				append([]any{
+					"role", string(c.auth.Role), "session_id", link.Session.ID,
+				}, timingFields...)...)
 			firstEstablishment = false
 		} else {
 			// Distinguish a recovery from the initial establishment so a reconnect
 			// is unmistakable in the debug log.
 			c.logger.Info("reconnect: session re-established",
-				"role", string(c.auth.Role), "session_id", link.Session.ID)
+				append([]any{
+					"role", string(c.auth.Role), "session_id", link.Session.ID,
+				}, timingFields...)...)
 		}
 
 		if err := c.serve(parent, link); err != nil {
@@ -113,7 +129,11 @@ func (c *Connector) Run(parent context.Context) error {
 		// serve returned nil: the session ended on its own (peer teardown, e.g. a
 		// NAT entry expiring). Log it explicitly so recovery is visible, then loop
 		// back and reconnect.
-		c.logger.Info("reconnect: session ended, reconnecting")
+		c.logger.Info("reconnect: session ended, reconnecting",
+			"session_id", link.Session.ID,
+			"keepalive_interval", c.auth.Timing.KeepAliveInterval,
+			"ping_timeout", c.auth.Timing.PingTimeout,
+		)
 		c.clearIf(link)
 
 		// Reset the backoff floor only if the session proved healthy for

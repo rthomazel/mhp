@@ -14,11 +14,11 @@ func makePair(t *testing.T) (*Session, *Session) {
 	t.Helper()
 	clientConn, serverConn := net.Pipe()
 	timing := DefaultTiming
-	clientMux, err := newClientSession(clientConn, timing)
+	clientMux, err := newClientSession(clientConn, timing, quietLogger())
 	if err != nil {
 		t.Fatalf("client session: %v", err)
 	}
-	serverMux, err := newServerSession(serverConn, timing)
+	serverMux, err := newServerSession(serverConn, timing, quietLogger())
 	if err != nil {
 		t.Fatalf("server session: %v", err)
 	}
