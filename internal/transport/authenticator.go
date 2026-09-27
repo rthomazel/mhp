@@ -100,7 +100,7 @@ func (a *Authenticator) authenticate(ctx context.Context, log *slog.Logger, dial
 		_ = conn.Close()
 		return nil, fmt.Errorf("transport: %w", err)
 	}
-	mux, err := newClientSession(conn, a.Timing)
+	mux, err := newClientSession(conn, a.Timing, log)
 	if err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("%w: %v", ErrHandshake, err)

@@ -98,7 +98,7 @@ func (h *Handshake) handshake(ctx context.Context, raw net.Conn) (*Session, erro
 		return nil, fmt.Errorf("%w: %v", ErrSendFailure, err)
 	}
 
-	mux, err := newServerSession(tlsConn, h.Timing)
+	mux, err := newServerSession(tlsConn, h.Timing, h.Logger)
 	if err != nil {
 		_ = tlsConn.Close()
 		return nil, fmt.Errorf("transport: %w", err)
