@@ -68,6 +68,28 @@ func TestCloseCascadesToClosingChannel(t *testing.T) {
 	}
 }
 
+// TestDoneFiresOnPeerTeardown guards the regression where a session died at the
+// peer (e.g. yamux keepalive timing out after a NAT entry expired) never
+// propagated to observers: Session.Done() only closed on an explicit Close(),
+// so a client parked on it sat blind forever. Closing the peer's side here
+// simulates that peer-initiated teardown and must wake Done().
+func TestDoneFiresOnPeerTeardown(t *testing.T) {
+	client, server := makePair(t)
+	defer func() { _ = server.Close() }()
+
+	// Simulate the peer tearing the session down out from under us.
+	if err := server.Close(); err != nil {
+		t.Fatalf("server close: %v", err)
+	}
+
+	select {
+	case <-client.Done():
+		// ok: a peer teardown is a session end.
+	case <-time.After(2 * time.Second):
+		t.Fatal("Done() never fired after peer teardown")
+	}
+}
+
 func TestUptimeAndHealthySince(t *testing.T) {
 	client, server := makePair(t)
 	defer func() { _ = client.Close() }()

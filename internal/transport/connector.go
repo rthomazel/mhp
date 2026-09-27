@@ -142,6 +142,11 @@ func (c *Connector) serve(parent context.Context, link *LinkedSession) error {
 	case <-link.done:
 		return nil
 	case <-parent.Done():
+		// Shut the session down so yamux's CloseChan fires. That unblocks the
+		// peer-teardown watcher goroutine spun up in newSession, and lets any
+		// broker parked on link.Session.Done() wind down too. link.cancel()
+		// additionally wakes workers riding the link context.
+		_ = link.Session.Close()
 		link.cancel()
 		return parent.Err()
 	}
