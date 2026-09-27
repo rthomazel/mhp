@@ -4,6 +4,7 @@
 /mhp-windows-amd64.exe
 /dist/
 /out/
+bin/mhp
 
 # Credentials and keys. Security-critical: never commit keys, tokens,
 # CSRs, or the CA serial. The relay client material lives under
