@@ -40,4 +40,4 @@ ENTRYPOINT ["/usr/local/bin/mhp"]
 # NOTE: keep the CMD array on a single physical line. The legacy (non-BuildKit)
 # Docker parser treats each continuation line of a multi-line JSON array as a
 # new instruction, which fails with: unknown instruction: "-tls-cert".
-CMD ["-mode", "relay", "-listen", ":443", "-tls-cert", "/credentials/relay.crt", "-tls-key", "/credentials/relay.key", "-exit-token-file", "/credentials/exit.token", "-proxy-token-file", "/credentials/proxy.token"]
+CMD ["-mode", "relay", "-listen", ":443", "-tls-cert", "/credentials/relay.crt", "-tls-key", "/credentials/relay.key", "-exit-token-file", "/credentials/exit.token", "-proxy-token-file", "/credentials/proxy.token", "-debug"]
