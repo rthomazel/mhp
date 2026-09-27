@@ -41,18 +41,23 @@ The CA signing key (`ca.key`) stays **offline** -- never mount it anywhere.
 ## 1. Generate credentials
 
 Run the cert/token generator wherever the relay will be deployed (the VPS is
-ideal). It produces the CA, the relay leaf, and both role tokens:
+ideal). Run it once from the repo root -- it generates the credentials into
+`deploy/relay/credentials/` and prints the next step:
+
+```sh
+# On the VPS (or any machine with openssl 3.x), from the repo root
+./deploy/relay/init_credentials.sh
+```
+
+`init_credentials.sh` is a thin wrapper around `scripts/generate_certs.sh`: it
+ensures the credentials directory exists, calls the generator (same options),
+then echoes the `docker compose` command you need next. If you'd rather
+generate credentials on another machine and ship only the files, call the
+generator directly:
 
 ```sh
 # On the VPS (or any machine with openssl 3.x)
 ./scripts/generate_certs.sh deploy/relay/credentials
-```
-
-Then run the relay bootstrap, which places those files under
-`deploy/relay/credentials` and tells you the next step:
-
-```sh
-./deploy/relay/init_credentials.sh
 ```
 
 Files produced:

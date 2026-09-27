@@ -20,7 +20,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mhp ./cmd/mhp
 
-FROM debian:slim
+# `debian:slim` was retired on Docker Hub; pin to the current stable codename.
+FROM debian:trixie-slim
 LABEL org.opencontainers.title="mhp-relay"
 LABEL org.opencontainers.description="MHP relay: coordinates browser traffic from proxy clients to exit clients."
 
@@ -36,8 +37,7 @@ COPY --from=build /out/mhp /usr/local/bin/mhp
 EXPOSE 443
 
 ENTRYPOINT ["/usr/local/bin/mhp"]
-CMD ["-mode", "relay", "-listen", ":443",
-     "-tls-cert", "/credentials/relay.crt",
-     "-tls-key", "/credentials/relay.key",
-     "-exit-token-file", "/credentials/exit.token",
-     "-proxy-token-file", "/credentials/proxy.token"]
+# NOTE: keep the CMD array on a single physical line. The legacy (non-BuildKit)
+# Docker parser treats each continuation line of a multi-line JSON array as a
+# new instruction, which fails with: unknown instruction: "-tls-cert".
+CMD ["-mode", "relay", "-listen", ":443", "-tls-cert", "/credentials/relay.crt", "-tls-key", "/credentials/relay.key", "-exit-token-file", "/credentials/exit.token", "-proxy-token-file", "/credentials/proxy.token"]
