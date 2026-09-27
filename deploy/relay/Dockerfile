@@ -20,7 +20,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mhp ./cmd/mhp
 
-FROM debian:slim
+# `debian:slim` was retired on Docker Hub; pin to the current stable codename.
+FROM debian:trixie-slim
 LABEL org.opencontainers.title="mhp-relay"
 LABEL org.opencontainers.description="MHP relay: coordinates browser traffic from proxy clients to exit clients."
 

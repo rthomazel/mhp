@@ -24,4 +24,4 @@ mkdir -p "$CREDS_DIR"
 
 echo
 echo "Credentials ready in $CREDS_DIR. Next:"
-echo "  docker compose -f compose.yml up -d --build"
+echo "  docker compose -f \"$SCRIPT_DIR/compose.yml\" up -d --build"
