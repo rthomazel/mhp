@@ -24,7 +24,7 @@ import (
 
 // MaxPending is the capacity of the admission semaphore. It caps the number of
 // simultaneously bridged browser connections at the proxy, as the plan pins.
-const MaxPending = 64
+const MaxPending = 256
 
 // Listener accepts browser TCP connections on a loopback address and bridges
 // each into the current relay session. It is intentionally decoupled from the
