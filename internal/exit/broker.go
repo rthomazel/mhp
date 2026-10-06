@@ -130,8 +130,15 @@ func (b *Broker) streamAcceptor(link *transport.LinkedSession, feed chan<- net.C
 // not a fatal condition.
 func (b *Broker) serveConn(link *transport.LinkedSession, conn net.Conn) {
 	go func() {
+		logger := b.logger.With("session_id", link.Session.ID)
+		if identified, ok := conn.(interface{ StreamID() uint32 }); ok {
+			logger = logger.With("stream_id", identified.StreamID())
+		}
+		started := time.Now()
+		logger.Debug("exit: stream accepted")
+		defer func() { logger.Debug("exit: stream complete", "elapsed_ms", time.Since(started).Milliseconds()) }()
 		if err := b.handler.ServeConn(link.Ctx, conn); err != nil {
-			b.logger.Debug("exit: SOCKS5 request ended",
+			logger.Debug("exit: SOCKS5 request ended",
 				"session_id", link.Session.ID,
 				"error", err,
 			)

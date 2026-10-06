@@ -7,8 +7,9 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
-	"sync"
 	"time"
+
+	"github.com/rthomazel/mhp/internal/stream"
 
 	socks5 "github.com/things-go/go-socks5"
 	statute "github.com/things-go/go-socks5/statute"
@@ -91,7 +92,29 @@ func (s socksLogger) Errorf(format string, a ...any) {
 // session and setup contexts, then serves the browser's request on conn. It is
 // called once per accepted relay stream.
 func (h *Handler) ServeConn(sessionCtx context.Context, conn net.Conn) error {
-	h.opts.Logger.Debug("exit: serving SOCKS stream")
+	local := *h
+	h = &local
+	if identified, ok := conn.(interface{ StreamID() uint32 }); ok {
+		h.opts.Logger = h.opts.Logger.With("stream_id", identified.StreamID())
+	}
+	started := time.Now()
+	h.opts.Logger.Debug("exit: serving SOCKS stream", "peer", conn.RemoteAddr())
+	defer func() { h.opts.Logger.Debug("exit: stream ended", "elapsed_ms", time.Since(started).Milliseconds()) }()
+	if err := conn.SetDeadline(time.Now().Add(h.opts.SetupTimeout)); err != nil {
+		return err
+	}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		select {
+		case <-sessionCtx.Done():
+			_ = conn.SetDeadline(time.Now().Add(-time.Second))
+			_ = conn.Close()
+		case <-stop:
+		}
+	}()
+	defer func() { close(stop); <-done }()
 
 	setupCtx, cancel := context.WithTimeout(sessionCtx, h.opts.SetupTimeout)
 	defer cancel()
@@ -143,11 +166,18 @@ func (h *Handler) handleConnect(sessionCtx, setupCtx context.Context, writer net
 	if dialer == nil {
 		dialer = &net.Dialer{}
 	}
-	target, err := dialer.DialContext(setupCtx, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(dest.Port)))
+	dialCtx, cancelDial := context.WithTimeout(setupCtx, h.opts.DialTimeout)
+	defer cancelDial()
+	started := time.Now()
+	h.opts.Logger.Debug("exit: dial started", "destination", dest.String())
+	target, err := dialer.DialContext(dialCtx, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(dest.Port)))
 	if err != nil {
 		_ = socks5.SendReply(writer, statute.RepHostUnreachable, nil)
 		return fmt.Errorf("exit: dial %s: %w", ip, err)
 	}
+
+	defer func() { _ = target.Close() }()
+	h.opts.Logger.Debug("exit: dial completed", "elapsed_ms", time.Since(started).Milliseconds())
 
 	// Success reports the destination socket's bound address — the exit's real
 	// egress address — not the relay address the stream arrived on.
@@ -166,6 +196,9 @@ func (h *Handler) handleConnect(sessionCtx, setupCtx context.Context, writer net
 	// CONNECT succeeded: the setup budget has done its job. Drop it. Subsequent
 	// browsing data rides sessionCtx only, so it is never truncated by a short
 	// setup deadline.
+	if err := writer.SetDeadline(time.Time{}); err != nil {
+		return err
+	}
 	forward(sessionCtx, writer, req.Reader, target, h.opts.Logger)
 	return nil
 }
@@ -177,44 +210,19 @@ func (h *Handler) handleConnect(sessionCtx, setupCtx context.Context, writer net
 // cancellation stamps a past deadline on both ends to unblock the still-running
 // copy, and every goroutine is joined before returning.
 func forward(sessionCtx context.Context, writer net.Conn, reader io.Reader, target net.Conn, logger *slog.Logger) {
-	var cp sync.WaitGroup
-	cp.Add(1)
-	go func() {
-		defer cp.Done()
-		// client -> target. io.Copy drains the SOCKS library's buffered reader,
-		// so read-ahead bytes are never lost.
-		if _, err := io.Copy(target, reader); err != nil {
-			logger.Debug("exit: client->target copy ended", "error", err)
-		}
-		// Client half-closed: FIN the destination write side, keep reading.
-		if cw, ok := target.(interface{ CloseWrite() error }); ok {
-			_ = cw.CloseWrite()
-		}
-	}()
-
-	// Unblock both copies if the session is torn down mid-transfer.
-	stop := make(chan struct{})
-	go func() {
-		select {
-		case <-sessionCtx.Done():
-			dead := time.Now().Add(-time.Second)
-			_ = target.SetDeadline(dead)
-			_ = writer.SetDeadline(dead)
-		case <-stop:
-		}
-	}()
-
-	// target -> client.
-	if _, err := io.Copy(writer, target); err != nil {
-		logger.Debug("exit: target->client copy ended", "error", err)
-	}
-	close(stop)
-
-	// Response drained. Unblock any still-pending client->target copy by
-	// stamping a past deadline on the browser stream, then join.
-	_ = writer.SetDeadline(time.Now().Add(-time.Second))
-	cp.Wait()
+	started := time.Now()
+	err := stream.NewDuplex(&payloadConn{Conn: writer, reader: reader}, target).Run(sessionCtx)
+	logger.Debug("exit: forwarding ended", "elapsed_ms", time.Since(started).Milliseconds(), "error", err)
 }
+
+// payloadConn preserves SOCKS read-ahead while exposing half-close.
+type payloadConn struct {
+	net.Conn
+	reader io.Reader
+}
+
+func (c *payloadConn) Read(p []byte) (int, error) { return c.reader.Read(p) }
+func (c *payloadConn) CloseWrite() error          { return stream.CloseWrite(c.Conn) }
 
 // connectOnlyRule permits the CONNECT command and rejects BIND/ASSOCIATE, as
 // the plan mandates a CONNECT-only exit.

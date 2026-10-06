@@ -15,8 +15,8 @@ import (
 )
 
 // maxStreams is the ceiling on simultaneously bridged proxy↔exit stream pairs.
-// The plan pins the relay/exit concurrency at 64.
-const maxStreams = 64
+// The plan pins the relay/exit concurrency at 256.
+const maxStreams = 256
 
 // Bridge pairs accepted proxy-originated streams with freshly opened exit
 // streams and copies bytes between them. It knows how to reach the current
@@ -119,6 +119,8 @@ func (c *counterConn) Write(p []byte) (int, error) {
 // bytes returns the total bytes written through the wrapper.
 func (c *counterConn) bytes() int64 { return c.n }
 
+func (c *counterConn) CloseWrite() error { return stream.CloseWrite(c.Conn) }
+
 // launch wires a single proxy↔exit pair, honoring the active-stream ceiling
 // before spawning any work.
 func (b *Bridge) launch(parent context.Context, proxySession, exitSession *yamux.Session, proxy, exit *yamux.Stream) {
@@ -136,11 +138,13 @@ func (b *Bridge) launch(parent context.Context, proxySession, exitSession *yamux
 	b.mu.Unlock()
 
 	child, cancel := context.WithCancel(parent)
+	watcherDone := make(chan struct{})
 
 	// Tear the pair down when either session ends or the parent is cancelled,
 	// whichever fires first. Watching both sessions' CloseChan keeps a dead
 	// proxy connection from parking a watcher goroutine past its useful life.
 	go func() {
+		defer close(watcherDone)
 		select {
 		case <-proxySession.CloseChan():
 			b.logger.Debug("relay: proxy session closechan triggered teardown")
@@ -148,14 +152,15 @@ func (b *Bridge) launch(parent context.Context, proxySession, exitSession *yamux
 		case <-exitSession.CloseChan():
 			b.logger.Debug("relay: exit session closechan triggered teardown")
 			cancel()
-		case <-parent.Done():
-			b.logger.Debug("relay: parent context cancelled teardown")
+		case <-child.Done():
+			b.logger.Debug("relay: bridge context ended")
 			cancel()
 		}
 	}()
 
 	go func() {
 		defer b.track(id, cancel)
+		defer func() { cancel(); <-watcherDone }()
 
 		// Debug: mark the pairing start so a flow can be correlated across the
 		// relay, and tally bytes per direction so the debug file shows traffic

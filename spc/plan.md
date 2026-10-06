@@ -111,7 +111,7 @@ Initial defaults accepted in review (constants initially; tune only from evidenc
 | Browser SOCKS setup including resolve/dial | 15s total |
 | Destination dial | at most 10s within remaining setup budget |
 | Half-closed stream drain | 30s before forced cleanup |
-| Active browser streams | 64 globally at relay/exit and locally at proxy |
+| Active browser streams | 256 globally at relay/exit and locally at proxy (raised after browsing QA) |
 | Concurrent unauthenticated relay connections | 16; excess closed |
 
 Use yamux's existing heartbeat rather than implementing another protocol. With inspected implementation, failed idle path detection is approximately interval plus ping timeout, not a hard real-time guarantee. Inspect behavior at the pinned revision. Connection errors may detect failure sooner.
