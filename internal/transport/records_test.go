@@ -8,7 +8,7 @@ import (
 )
 
 func TestValidateHello(t *testing.T) {
-	good := Hello{Version: helloVersion, Role: config.ModeExit, Token: "tok"}
+	good := Hello{Version: helloVersion, Role: "exit-node", Token: "tok"}
 	if err := validateHello(good); err != nil {
 		t.Fatalf("want nil, got %v", err)
 	}
@@ -16,8 +16,10 @@ func TestValidateHello(t *testing.T) {
 	if err := validateHello(Hello{Version: 99, Role: config.ModeExit}); !errors.Is(err, ErrProtocolVersion) {
 		t.Fatalf("want ErrProtocolVersion, got %v", err)
 	}
-	if err := validateHello(Hello{Version: helloVersion, Role: "ghost"}); !errors.Is(err, ErrUnexpectedRole) {
-		t.Fatalf("want ErrUnexpectedRole, got %v", err)
+	for _, role := range []config.Mode{"ghost", "exit", "exit-note"} {
+		if err := validateHello(Hello{Version: helloVersion, Role: role}); !errors.Is(err, ErrUnexpectedRole) {
+			t.Fatalf("role %q: want ErrUnexpectedRole, got %v", role, err)
+		}
 	}
 }
 

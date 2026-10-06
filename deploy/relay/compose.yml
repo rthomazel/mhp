@@ -15,11 +15,12 @@ services:
   relay:
     build:
       context: ../../
-      dockerfile: deploy/relay/Dockerfile
+      dockerfile: Dockerfile
       args:
         # The VPS network blocks proxy.golang.org; goproxy.cn works there.
         GOPROXY: https://goproxy.cn,direct
-    image: mhp-relay:latest
+    image: mhp:latest
+    command: ["-mode", "relay", "-listen", ":443", "-tls-cert", "/credentials/relay.crt", "-tls-key", "/credentials/relay.key", "-exit-token-file", "/credentials/exit.token", "-proxy-token-file", "/credentials/proxy.token", "-debug"]
     container_name: mhp-relay
 
     # Run as root to bind TCP/443 inside the container.
@@ -32,7 +33,10 @@ services:
     # Credentials persist on the host, so they survive container recreation.
     # Mounted read-only; the relay only needs to read them.
     volumes:
-      - ./credentials:/credentials:ro
+      - ./credentials/relay.crt:/credentials/relay.crt:ro
+      - ./credentials/relay.key:/credentials/relay.key:ro
+      - ./credentials/exit.token:/credentials/exit.token:ro
+      - ./credentials/proxy.token:/credentials/proxy.token:ro
 
     # Recover automatically across network blips, VPS reboots, and crashes.
     restart: unless-stopped

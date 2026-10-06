@@ -15,9 +15,9 @@ TCP/443.
 | --------- | -------------- | ---------- | --------------- | ----------- |
 | `relay`   | Germany VPS    | **root**   | TCP/443         | (none)      |
 | `proxy`   | User's Windows | unprivileged | loopback:1080 | relay       |
-| `exit`    | User's Windows | unprivileged | (none)        | relay       |
+| `exit-node` | User's Windows | unprivileged | (none)        | relay       |
 
-The relay and proxy run as root; the exit client stays unprivileged.
+The relay container runs as root; native clients can run unprivileged.
 
 ## Topology and ports
 
@@ -103,8 +103,8 @@ What the container does:
 - Runs as **root** inside the container to bind TCP/443 directly -- no
   `CAP_NET_BIND_SERVICE` needed.
 - Publishes host `443:443` via compose.
-- Mounts `./credentials` **read-only** (`:ro`) at `/credentials`; the relay
-  reads leaf + tokens at startup.
+- Mounts only the leaf certificate/key and both tokens **read-only** at
+  `/credentials`; the CA signing key is never mounted.
 - Restarts `unless-stopped` to survive crashes, network blips, and VPS reboots.
 
 The build context is the repo root, so `.dockerignore` excludes the
@@ -133,6 +133,63 @@ docker compose -f compose.yml logs -f relay
 Because `credentials/` lives on the host (bind-mounted, not an anonymous
 volume), recreating or replacing the container keeps the same cert and tokens.
 Only the image and code change.
+
+### Reuse the image for any mode
+
+Build once from the repository root:
+
+```sh
+docker build -t mhp:latest .
+# If proxy.golang.org is blocked, add --build-arg GOPROXY=https://goproxy.cn,direct
+```
+
+The image has `ENTRYPOINT ["/usr/local/bin/mhp"]` and no default mode.
+Compose `command` passes flags directly to the binary. The relay Compose above
+is one consumer; on the exit-node host, for example:
+
+```yaml
+services:
+  exit-node:
+    image: mhp:latest
+    command: ["-mode", "exit-node", "-relay", "${RELAY_IP:?set RELAY_IP}:443", "-tls-name", "en.zalando.de", "-ca", "/credentials/relay-ca.crt", "-token-file", "/credentials/exit.token"]
+    volumes:
+      - ./credentials/relay-ca.crt:/credentials/relay-ca.crt:ro
+      - ./credentials/exit.token:/credentials/exit.token:ro
+    restart: unless-stopped
+```
+
+Alternatively, specify the binary and mode in an exec-form entrypoint; put
+remaining flags in `command`. This proxy example runs on the **Linux browser
+host**, not the relay host:
+
+```yaml
+services:
+  proxy:
+    image: mhp:latest
+    network_mode: host
+    entrypoint: ["/usr/local/bin/mhp", "-mode", "proxy"]
+    command: ["-listen", "127.0.0.1:1080", "-relay", "${RELAY_IP:?set RELAY_IP}:443", "-tls-name", "en.zalando.de", "-ca", "/credentials/relay-ca.crt", "-token-file", "/credentials/proxy.token"]
+    volumes:
+      - ./credentials/relay-ca.crt:/credentials/relay-ca.crt:ro
+      - ./credentials/proxy.token:/credentials/proxy.token:ro
+    restart: unless-stopped
+```
+
+Copy the built image to each host (for example with `docker save`/`docker load`)
+and provision only the indicated credentials before starting Compose. Mount
+paths are relative to each Compose file. Never distribute or mount `ca.key`.
+The exit-node needs no published ports; traffic exits from its container host.
+
+The proxy deliberately accepts only loopback listeners. Ordinary bridge-network
+`ports` publishing cannot reach its container-local loopback listener. Use Linux
+host networking as above, share the browser's network namespace explicitly, or
+use the native binary on Windows/other platforms. Do not change the listener to
+`0.0.0.0`: SOCKS is unauthenticated. Host networking needs no `ports` section.
+
+No shell wrapper intercepts arguments or shutdown signals. Logging defaults to
+console; add `-debug` only when needed (it also writes a file in the working
+directory). Client containers can use `user` with readable credentials and a
+writable working directory for debug logs.
 
 ## 3. Install the Windows clients
 

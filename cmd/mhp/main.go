@@ -1,5 +1,5 @@
 // Command mhp is a reverse-proxy server with three interchangeable roles:
-// relay, exit, and proxy. Each mode is configured through the same flag set;
+// relay, exit-node, and proxy. Each mode is configured through the same flag set;
 // the mode selects which flags are required and how the resulting Config is
 // consumed.
 //
@@ -78,7 +78,7 @@ func parseFlags(argv []string) (config.ParsedFlags, error) {
 	f := flag.NewFlagSet("mhp", flag.ContinueOnError)
 	mode := f.String("mode", "", "one of relay, exit-node, proxy")
 	listen := f.String("listen", "", "relay listen address (relay) or proxy listen address (proxy, loopback)")
-	relay := f.String("relay", "", "relay address host:port the exit/proxy connect to")
+	relay := f.String("relay", "", "relay address host:port the exit-node/proxy connect to")
 	tlsName := f.String("tls-name", "", "SNI/server-name override the client presents")
 	ca := f.String("ca", "", "path to the trusted CA certificate file")
 	tlsCert := f.String("tls-cert", "", "path to the relay leaf certificate")
@@ -199,7 +199,7 @@ func runExit(ctx context.Context, cfg config.Config, logger *logging.Logger) err
 	// continue so a cancelled context can still unwind cleanly below.
 	rootCAs, err := transport.LoadTrustPool(cfg.CAPath)
 	if err != nil {
-		logger.Slog.Warn("exit: trust pool unavailable, retrying on reconnect",
+		logger.Slog.Warn("exit-node: trust pool unavailable, retrying on reconnect",
 			"ca_path", cfg.CAPath, "error", err)
 	}
 

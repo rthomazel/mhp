@@ -1,4 +1,4 @@
-# Never let secrets, VCS metadata, or unrelated files into the relay build.
+# Never let secrets, VCS metadata, or unrelated files into the image build.
 # Build context is the repo root (see deploy/relay/compose.yml).
 .git
 .gitignore
