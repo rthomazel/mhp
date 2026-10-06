@@ -134,9 +134,31 @@ Because `credentials/` lives on the host (bind-mounted, not an anonymous
 volume), recreating or replacing the container keeps the same cert and tokens.
 Only the image and code change.
 
+### Published image and Compose samples
+
+Pushing a release tag such as `v0.1.0` runs `.github/workflows/release.yml` and
+publishes `ghcr.io/rthomazel/mhp:0.1.0` for Linux amd64. The workflow
+uses `GITHUB_TOKEN` with package-write permission; no registry PAT is required.
+Only stable `vMAJOR.MINOR.PATCH` tags are accepted; no `latest` tag is updated.
+After the first publication, set the GHCR package visibility to **public** if
+anonymous pulls are desired (new packages may initially be private).
+
+Ready-to-use samples:
+
+- [Exit-node Compose](../deploy/exit-node/compose.yml): run on the egress host.
+- [Proxy Compose](../deploy/proxy/compose.yml): run on the Linux browser host.
+
+The samples reference version `0.1.0`, which becomes available after that tag's
+release workflow succeeds. In each sample's directory, create `credentials/`
+and copy `relay-ca.crt` plus only that client's token (`exit.token` or
+`proxy.token`). Then run `RELAY_IP=<relay-ip> docker compose up -d`.
+Adjust `-tls-name` if your relay certificate uses a different DNS name.
+No ports are published by either sample. Configure Firefox for SOCKS5 at
+`127.0.0.1:1080` on the proxy host. Do not copy the CA private key.
+
 ### Reuse the image for any mode
 
-Build once from the repository root:
+For local development, build once from the repository root:
 
 ```sh
 docker build -t mhp:latest .
@@ -175,8 +197,9 @@ services:
     restart: unless-stopped
 ```
 
-Copy the built image to each host (for example with `docker save`/`docker load`)
-and provision only the indicated credentials before starting Compose. Mount
+For locally built images, copy the image to each host (for example with
+`docker save`/`docker load`). Alternatively, use the published GHCR image as in
+the samples above. Provision only the indicated credentials before starting Compose. Mount
 paths are relative to each Compose file. Never distribute or mount `ca.key`.
 The exit-node needs no published ports; traffic exits from its container host.
 
@@ -193,7 +216,9 @@ writable working directory for debug logs.
 
 ## 3. Install the Windows clients
 
-Both clients are a single cross-compiled binary. Build from any machine:
+Download `mhp.exe` and `SHA256SUMS` from [GitHub Releases](https://github.com/rthomazel/mhp/releases). Each release tag builds the Windows amd64 binary with CGO disabled and attaches its SHA-256 checksum. Compare with `Get-FileHash .\mhp.exe -Algorithm SHA256` in PowerShell before running.
+
+Both clients use the same binary. Alternatively, build from any machine:
 
 ```sh
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o mhp.exe ./cmd/mhp

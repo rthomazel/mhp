@@ -2,7 +2,7 @@
 # Build context is the repo root (see deploy/relay/compose.yml).
 .git
 .gitignore
-deploy/relay/credentials/
+deploy/*/credentials/
 *.key
 *.csr
 *.srl
