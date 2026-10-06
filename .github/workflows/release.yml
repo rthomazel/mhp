@@ -52,7 +52,9 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/rthomazel/mhp:${{ steps.version.outputs.value }}
+          tags: |
+            ghcr.io/rthomazel/mhp:${{ steps.version.outputs.value }}
+            ghcr.io/rthomazel/mhp:latest
           labels: |
             org.opencontainers.image.source=https://github.com/rthomazel/mhp
             org.opencontainers.image.version=${{ steps.version.outputs.value }}

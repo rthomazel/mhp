@@ -137,9 +137,15 @@ Only the image and code change.
 ### Published image and Compose samples
 
 Pushing a release tag such as `v0.1.0` runs `.github/workflows/release.yml` and
-publishes `ghcr.io/rthomazel/mhp:0.1.0` for Linux amd64. The workflow
+publishes `ghcr.io/rthomazel/mhp:0.1.0` and `ghcr.io/rthomazel/mhp:latest`
+for Linux amd64. The workflow
 uses `GITHUB_TOKEN` with package-write permission; no registry PAT is required.
-Only stable `vMAJOR.MINOR.PATCH` tags are accepted; no `latest` tag is updated.
+Only stable `vMAJOR.MINOR.PATCH` tags are accepted. Each successful image push
+updates `latest` to that build (including reruns of older release tags); it is
+not selected by semantic-version ordering. Compose samples pin `0.1.0` for
+predictable upgrades. To follow releases instead, set `image` to
+`ghcr.io/rthomazel/mhp:latest`, then run `docker compose pull` and
+`docker compose up -d` to apply an update.
 After the first publication, set the GHCR package visibility to **public** if
 anonymous pulls are desired (new packages may initially be private).
 
