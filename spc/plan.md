@@ -16,7 +16,7 @@ Status: **design draft for review; not implemented**. This document is the imple
 Basic web browsing from Firefox through an always-on Windows machine. One Go binary, three `-mode` values:
 
 - **relay**: fixed public IP in Germany; coordinates sessions and relays traffic.
-- **exit**: Windows exit client, connects outbound to relay and opens website TCP connections.
+- **exit-node**: Windows exit client, connects outbound to relay and opens website TCP connections.
 - **proxy**: proxy client, exposes SOCKS5 on localhost for the browser.
 
 ```
@@ -86,7 +86,7 @@ Separate high-entropy exit and proxy bearer tokens, carried only after verified 
 Before starting yamux, exchange bounded control records over TLS:
 
 - uint32 big-endian length, followed by JSON (maximum 4096 bytes).
-- Client hello: `version: 1`, `role: exit|proxy`, `token`.
+- Client hello: `version: 1`, `role: exit-node|proxy`, `token`.
 - Relay response: `version: 1`, `status: ok|error`, non-secret `session_id` on success, bounded error code otherwise.
 - Reject invalid version/role/length/authentication and close. Never create/register yamux before authentication succeeds.
 - Entire TLS handshake plus hello/response bounded by setup deadline; clear deadline before starting mux.
@@ -124,7 +124,7 @@ Illustrative interface (credential flags name files, never literal secrets):
 
 ```sh
 mhp -mode relay -listen :443 -tls-cert relay.crt -tls-key relay.key -exit-token-file exit.token -proxy-token-file proxy.token
-mhp -mode exit -relay <ip>:443 -tls-name en.zalando.de -ca relay-ca.crt -token-file exit.token -debug
+mhp -mode exit-node -relay <ip>:443 -tls-name en.zalando.de -ca relay-ca.crt -token-file exit.token -debug
 mhp -mode proxy -relay <ip>:443 -tls-name en.zalando.de -ca relay-ca.crt -token-file proxy.token -listen 127.0.0.1:1080 -debug
 ```
 
@@ -137,7 +137,7 @@ Prefer an injected `slog.Logger` writing to console or `io.MultiWriter(console, 
 ```bat
 @echo off
 cd /d "%~dp0"
-mhp.exe -mode exit -relay <ip>:443 -tls-name en.zalando.de -ca relay-ca.crt -token-file exit.token -debug
+mhp.exe -mode exit-node -relay <ip>:443 -tls-name en.zalando.de -ca relay-ca.crt -token-file exit.token -debug
 pause
 ```
 

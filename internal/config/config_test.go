@@ -26,6 +26,23 @@ func asValidationError(err error) (*ValidationError, bool) {
 	return nil, false
 }
 
+func TestExitNodeModeName(t *testing.T) {
+	for _, mode := range []Mode{"exit-node", "exit", "exit-note"} {
+		t.Run(string(mode), func(t *testing.T) {
+			cfg, err := Load(ParsedFlags{Mode: mode, Relay: "relay:443", TokenFile: writeFile(t, "exit.token")})
+			if mode == "exit-node" {
+				if err != nil || cfg.Mode.String() != "exit-node" {
+					t.Fatalf("canonical mode: cfg=%v err=%v", cfg.Mode, err)
+				}
+				return
+			}
+			if ve, ok := asValidationError(err); !ok || ve.Field != "mode" {
+				t.Fatalf("want mode validation error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestValidModes(t *testing.T) {
 	exitTok := writeFile(t, "exit.token")
 	proxyTok := writeFile(t, "proxy.token")

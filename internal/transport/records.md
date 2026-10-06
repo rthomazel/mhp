@@ -16,7 +16,7 @@ Returned when a record advertises a version other than helloVersion.
 
 ## ErrUnexpectedRole = "transport: unexpected role"
 
-Returned when Hello.Role is neither exit nor proxy.
+Returned when Hello.Role is neither exit-node nor proxy.
 
 ## ErrUnexpectedStatus = "transport: unexpected status"
 
@@ -27,7 +27,7 @@ Returned when Response.Status is neither statusCodeOK nor statusCodeError.
 ## Hello
 
 1. Version uint16
-2. Role Mode — exit or proxy.
+2. Role Mode — exit-node or proxy.
 3. Token string — bearer presented to the relay.
 
 Sent by a client. Role selects the relay's expected bearer.
@@ -50,13 +50,13 @@ The relay verdict. Values are statusCodeOK and statusCodeError.
 ## validateHello(hello Hello) error
 
 1. if Version differs from helloVersion, return ErrProtocolVersion.
-2. if Role is neither exit nor proxy, return ErrUnexpectedRole.
+2. if Role is neither exit-node nor proxy, return ErrUnexpectedRole.
 3. return nil.
 
 #### Errors
 
 - **1.** if Version differs from helloVersion, return ErrProtocolVersion.
-- **2.** if Role is neither exit nor proxy, return ErrUnexpectedRole.
+- **2.** if Role is neither exit-node nor proxy, return ErrUnexpectedRole.
 
 ## validateResponse(resp Response) error
 

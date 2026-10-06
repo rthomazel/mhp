@@ -1,0 +1,11 @@
+# Run on the exit-node host after provisioning ./credentials.
+# RELAY_IP=<relay-ip> docker compose up -d
+name: mhp-exit-node
+services:
+  exit-node:
+    image: ghcr.io/rthomazel/mhp:0.1.0
+    command: ["-mode", "exit-node", "-relay", "${RELAY_IP:?set RELAY_IP}:443", "-tls-name", "en.zalando.de", "-ca", "/credentials/relay-ca.crt", "-token-file", "/credentials/exit.token"]
+    volumes:
+      - ./credentials/relay-ca.crt:/credentials/relay-ca.crt:ro
+      - ./credentials/exit.token:/credentials/exit.token:ro
+    restart: unless-stopped

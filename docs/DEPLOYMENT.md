@@ -15,9 +15,9 @@ TCP/443.
 | --------- | -------------- | ---------- | --------------- | ----------- |
 | `relay`   | Germany VPS    | **root**   | TCP/443         | (none)      |
 | `proxy`   | User's Windows | unprivileged | loopback:1080 | relay       |
-| `exit`    | User's Windows | unprivileged | (none)        | relay       |
+| `exit-node` | User's Windows | unprivileged | (none)        | relay       |
 
-The relay and proxy run as root; the exit client stays unprivileged.
+The relay container runs as root; native clients can run unprivileged.
 
 ## Topology and ports
 
@@ -103,8 +103,8 @@ What the container does:
 - Runs as **root** inside the container to bind TCP/443 directly -- no
   `CAP_NET_BIND_SERVICE` needed.
 - Publishes host `443:443` via compose.
-- Mounts `./credentials` **read-only** (`:ro`) at `/credentials`; the relay
-  reads leaf + tokens at startup.
+- Mounts only the leaf certificate/key and both tokens **read-only** at
+  `/credentials`; the CA signing key is never mounted.
 - Restarts `unless-stopped` to survive crashes, network blips, and VPS reboots.
 
 The build context is the repo root, so `.dockerignore` excludes the
@@ -134,9 +134,97 @@ Because `credentials/` lives on the host (bind-mounted, not an anonymous
 volume), recreating or replacing the container keeps the same cert and tokens.
 Only the image and code change.
 
+### Published image and Compose samples
+
+Pushing a release tag such as `v0.1.0` runs `.github/workflows/release.yml` and
+publishes `ghcr.io/rthomazel/mhp:0.1.0` and `ghcr.io/rthomazel/mhp:latest`
+for Linux amd64. The workflow
+uses `GITHUB_TOKEN` with package-write permission; no registry PAT is required.
+Only stable `vMAJOR.MINOR.PATCH` tags are accepted. Each successful image push
+updates `latest` to that build (including reruns of older release tags); it is
+not selected by semantic-version ordering. Compose samples pin `0.1.0` for
+predictable upgrades. To follow releases instead, set `image` to
+`ghcr.io/rthomazel/mhp:latest`, then run `docker compose pull` and
+`docker compose up -d` to apply an update.
+After the first publication, set the GHCR package visibility to **public** if
+anonymous pulls are desired (new packages may initially be private).
+
+Ready-to-use samples:
+
+- [Exit-node Compose](../deploy/exit-node/compose.yml): run on the egress host.
+- [Proxy Compose](../deploy/proxy/compose.yml): run on the Linux browser host.
+
+The samples reference version `0.1.0`, which becomes available after that tag's
+release workflow succeeds. In each sample's directory, create `credentials/`
+and copy `relay-ca.crt` plus only that client's token (`exit.token` or
+`proxy.token`). Then run `RELAY_IP=<relay-ip> docker compose up -d`.
+Adjust `-tls-name` if your relay certificate uses a different DNS name.
+No ports are published by either sample. Configure Firefox for SOCKS5 at
+`127.0.0.1:1080` on the proxy host. Do not copy the CA private key.
+
+### Reuse the image for any mode
+
+For local development, build once from the repository root:
+
+```sh
+docker build -t mhp:latest .
+# If proxy.golang.org is blocked, add --build-arg GOPROXY=https://goproxy.cn,direct
+```
+
+The image has `ENTRYPOINT ["/usr/local/bin/mhp"]` and no default mode.
+Compose `command` passes flags directly to the binary. The relay Compose above
+is one consumer; on the exit-node host, for example:
+
+```yaml
+services:
+  exit-node:
+    image: mhp:latest
+    command: ["-mode", "exit-node", "-relay", "${RELAY_IP:?set RELAY_IP}:443", "-tls-name", "en.zalando.de", "-ca", "/credentials/relay-ca.crt", "-token-file", "/credentials/exit.token"]
+    volumes:
+      - ./credentials/relay-ca.crt:/credentials/relay-ca.crt:ro
+      - ./credentials/exit.token:/credentials/exit.token:ro
+    restart: unless-stopped
+```
+
+Alternatively, specify the binary and mode in an exec-form entrypoint; put
+remaining flags in `command`. This proxy example runs on the **Linux browser
+host**, not the relay host:
+
+```yaml
+services:
+  proxy:
+    image: mhp:latest
+    network_mode: host
+    entrypoint: ["/usr/local/bin/mhp", "-mode", "proxy"]
+    command: ["-listen", "127.0.0.1:1080", "-relay", "${RELAY_IP:?set RELAY_IP}:443", "-tls-name", "en.zalando.de", "-ca", "/credentials/relay-ca.crt", "-token-file", "/credentials/proxy.token"]
+    volumes:
+      - ./credentials/relay-ca.crt:/credentials/relay-ca.crt:ro
+      - ./credentials/proxy.token:/credentials/proxy.token:ro
+    restart: unless-stopped
+```
+
+For locally built images, copy the image to each host (for example with
+`docker save`/`docker load`). Alternatively, use the published GHCR image as in
+the samples above. Provision only the indicated credentials before starting Compose. Mount
+paths are relative to each Compose file. Never distribute or mount `ca.key`.
+The exit-node needs no published ports; traffic exits from its container host.
+
+The proxy deliberately accepts only loopback listeners. Ordinary bridge-network
+`ports` publishing cannot reach its container-local loopback listener. Use Linux
+host networking as above, share the browser's network namespace explicitly, or
+use the native binary on Windows/other platforms. Do not change the listener to
+`0.0.0.0`: SOCKS is unauthenticated. Host networking needs no `ports` section.
+
+No shell wrapper intercepts arguments or shutdown signals. Logging defaults to
+console; add `-debug` only when needed (it also writes a file in the working
+directory). Client containers can use `user` with readable credentials and a
+writable working directory for debug logs.
+
 ## 3. Install the Windows clients
 
-Both clients are a single cross-compiled binary. Build from any machine:
+Download `mhp.exe` and `SHA256SUMS` from [GitHub Releases](https://github.com/rthomazel/mhp/releases). Each release tag builds the Windows amd64 binary with CGO disabled and attaches its SHA-256 checksum. Compare with `Get-FileHash .\mhp.exe -Algorithm SHA256` in PowerShell before running.
+
+Both clients use the same binary. Alternatively, build from any machine:
 
 ```sh
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o mhp.exe ./cmd/mhp

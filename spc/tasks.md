@@ -77,7 +77,7 @@ Depends on task 4.
 - [x] Document Firefox SOCKS5 localhost settings, optional proxy DNS and TCP-only scope. Actual relay IP remains a deployment input supplied by Thom.
 - [ ] Run verification below and record commit/build versions, sanitized logs and outcomes.
 
-Deliverables: `docs/DEPLOYMENT.md` (full runbook), `deploy/relay/{Dockerfile,compose.yml,.dockerignore,init_credentials.sh,credentials/README.md}`, `deploy/windows/{exit,proxy}.bat`, `scripts/generate_certs.sh` (certs + role tokens). Verified: `go build ./...`, `go vet ./...`, `go test -race ./...`, and the Windows cross-build all pass from commit `192aef2`.
+Deliverables: `docs/DEPLOYMENT.md` (full runbook), `Dockerfile`, `.dockerignore`, `deploy/relay/{compose.yml,init_credentials.sh,credentials/README.md}`, `deploy/windows/{exit,proxy}.bat`, `scripts/generate_certs.sh` (certs + role tokens). Verified: `go build ./...`, `go vet ./...`, `go test -race ./...`, and the Windows cross-build all pass from commit `192aef2`.
 
 References: [launch/interface](plan.md#cli-debug-output-and-windows-launch), [deployment agreement](plan.md#tls-authentication-and-initial-wire-exchange), netdiag [cross-build/deployment](https://github.com/rthomazel/netdiag/blob/2479bb06cccf688a0f43ebce7c4645511901f770/doc/deploy.md).
 
