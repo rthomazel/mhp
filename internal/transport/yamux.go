@@ -15,8 +15,8 @@ const defaultMaxStreamBytes = 4194304
 
 // defaultStreamConcurrency is the yamux accept backlog. It bounds how many
 // inbound streams may wait to be accepted before the peer is throttled; the
-// plan fixes the relay/exit/browser concurrency at 64.
-const defaultStreamConcurrency = 64
+// plan fixes the relay/exit/browser concurrency at 256.
+const defaultStreamConcurrency = 256
 
 // newClientSession starts a yamux client session on an authenticated TLS conn.
 func newClientSession(conn net.Conn, timing Timing, log *slog.Logger) (*yamux.Session, error) {

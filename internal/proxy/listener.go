@@ -17,6 +17,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"time"
 
 	"github.com/rthomazel/mhp/internal/stream"
 	"github.com/rthomazel/mhp/internal/transport"
@@ -24,7 +25,7 @@ import (
 
 // MaxPending is the capacity of the admission semaphore. It caps the number of
 // simultaneously bridged browser connections at the proxy, as the plan pins.
-const MaxPending = 64
+const MaxPending = 256
 
 // Listener accepts browser TCP connections on a loopback address and bridges
 // each into the current relay session. It is intentionally decoupled from the
@@ -97,7 +98,7 @@ func (l *Listener) serve(ctx context.Context, conn net.Conn) {
 	// stall behind it.
 	if !l.acquire() {
 		l.logger.Debug("proxy: connection limit reached, refusing",
-			"peer", conn.RemoteAddr().String())
+			"peer", conn.RemoteAddr().String(), "active", len(l.sem), "limit", MaxPending)
 		return
 	}
 	defer l.release()
@@ -115,9 +116,19 @@ func (l *Listener) serve(ctx context.Context, conn net.Conn) {
 		return
 	}
 
+	defer func() { _ = relayConn.Close() }()
+	started := time.Now()
+	logger := l.logger.With("session_id", link.Session.ID)
+	if identified, ok := relayConn.(interface{ StreamID() uint32 }); ok {
+		logger = logger.With("stream_id", identified.StreamID())
+	}
+	defer func() {
+		logger.Debug("proxy: stream ended", "elapsed_ms", time.Since(started).Milliseconds(), "active", len(l.sem))
+	}()
+
 	// Debug: mark the start of a browser flow so the debug file shows the proxy
 	// accepting real client connections and reaching the relay.
-	l.logger.Debug("proxy: opened relay stream",
+	logger.Debug("proxy: opened relay stream",
 		"proxy_peer", conn.RemoteAddr().String(),
 	)
 
@@ -126,7 +137,7 @@ func (l *Listener) serve(ctx context.Context, conn net.Conn) {
 	// browser flow without leaking the goroutine.
 	dup := stream.NewDuplex(conn, relayConn)
 	if err := dup.Run(link.Ctx); err != nil && !errors.Is(err, context.Canceled) {
-		l.logger.Warn("proxy: bridge closed", "error", err)
+		logger.Warn("proxy: bridge closed", "error", err)
 	}
 }
 
