@@ -47,10 +47,7 @@ func (h *redactingHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
 func (h *redactingHandler) Handle(ctx context.Context, rec slog.Record) error {
 	result := slog.NewRecord(rec.Time, rec.Level, rec.Message, rec.PC)
 	rec.Attrs(func(a slog.Attr) bool {
-		if h.isSensitive(a.Key) {
-			a.Value = slog.StringValue("[redacted]")
-		}
-		result.AddAttrs(a)
+		result.AddAttrs(h.redact(a))
 		return true
 	})
 	return h.next.Handle(ctx, result)
@@ -59,7 +56,11 @@ func (h *redactingHandler) Handle(ctx context.Context, rec slog.Record) error {
 // WithAttrs returns a child handler carrying the additional attrs, deferring so
 // inherited behaviour (level, handler composition) is preserved.
 func (h *redactingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	child := &redactingHandler{next: h.next.WithAttrs(attrs)}
+	redacted := make([]slog.Attr, len(attrs))
+	for i, attr := range attrs {
+		redacted[i] = h.redact(attr)
+	}
+	child := newRedactingHandler(h.next.WithAttrs(redacted))
 	for k := range h.sensitive {
 		child.sensitive[k] = true
 	}
@@ -69,11 +70,29 @@ func (h *redactingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 // WithGroup returns a child handler for a named group, deferring so inherited
 // behaviour is preserved.
 func (h *redactingHandler) WithGroup(name string) slog.Handler {
-	child := &redactingHandler{next: h.next.WithGroup(name)}
+	child := newRedactingHandler(h.next.WithGroup(name))
 	for k := range h.sensitive {
 		child.sensitive[k] = true
 	}
 	return child
+}
+
+// redact resolves lazy values and walks groups before delegating to the sink.
+func (h *redactingHandler) redact(attr slog.Attr) slog.Attr {
+	if h.isSensitive(attr.Key) {
+		attr.Value = slog.StringValue("[redacted]")
+		return attr
+	}
+	attr.Value = attr.Value.Resolve()
+	if attr.Value.Kind() == slog.KindGroup {
+		attrs := attr.Value.Group()
+		redacted := make([]slog.Attr, len(attrs))
+		for i, child := range attrs {
+			redacted[i] = h.redact(child)
+		}
+		attr.Value = slog.GroupValue(redacted...)
+	}
+	return attr
 }
 
 // isSensitive reports whether key is registered as sensitive.
