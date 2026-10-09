@@ -14,7 +14,7 @@ TCP/443.
 | Role      | Machine        | Privileges | Binds           | Connects to |
 | --------- | -------------- | ---------- | --------------- | ----------- |
 | `relay`   | Germany VPS    | **root**   | TCP/443         | (none)      |
-| `proxy`   | User's Windows | unprivileged | loopback:1080 | relay       |
+| `proxy`   | User's Windows or public host | unprivileged | configured SOCKS5 address | relay       |
 | `exit-node` | User's Windows | unprivileged | (none)        | relay       |
 
 The relay container runs as root; native clients can run unprivileged.
@@ -22,7 +22,8 @@ The relay container runs as root; native clients can run unprivileged.
 ## Topology and ports
 
 - **Relay** -- fixed public IP, TCP/443. Clients dial `<relay-ip>:443`.
-- **Proxy** -- loopback SOCKS5 on `127.0.0.1:1080`. Firefox points here.
+- **Proxy** -- SOCKS5 on the configured listen address. Use loopback for local,
+  unauthenticated clients; public listeners require `-username` and `-password`.
 - **Exit** -- no listener; it dials the relay and opens website TCP on the
   browser's behalf.
 
@@ -137,7 +138,7 @@ Only the image and code change.
 ### Published image and Compose samples
 
 Pushing a release tag such as `v0.1.0` runs `.github/workflows/release.yml` and
-publishes `ghcr.io/rthomazel/mhp:0.1.0` and `ghcr.io/rthomazel/mhp:latest`
+publishes `ghcr.io/rthomazel/mhp:v0.1.0` and `ghcr.io/rthomazel/mhp:latest`
 for Linux amd64. The workflow
 uses `GITHUB_TOKEN` with package-write permission; no registry PAT is required.
 Only stable `vMAJOR.MINOR.PATCH` tags are accepted. Each successful image push
@@ -209,11 +210,10 @@ the samples above. Provision only the indicated credentials before starting Comp
 paths are relative to each Compose file. Never distribute or mount `ca.key`.
 The exit-node needs no published ports; traffic exits from its container host.
 
-The proxy deliberately accepts only loopback listeners. Ordinary bridge-network
-`ports` publishing cannot reach its container-local loopback listener. Use Linux
-host networking as above, share the browser's network namespace explicitly, or
-use the native binary on Windows/other platforms. Do not change the listener to
-`0.0.0.0`: SOCKS is unauthenticated. Host networking needs no `ports` section.
+The proxy can listen on loopback or a wildcard address. Use Linux host
+networking when exposing a host-wide listener. Public listeners must be protected
+with `-username` and `-password`; keep credentials paired. Host networking needs
+no `ports` section.
 
 No shell wrapper intercepts arguments or shutdown signals. Logging defaults to
 console; add `-debug` only when needed (it also writes a file in the working
@@ -250,7 +250,7 @@ binary does. Put it next to `relay-ca.crt` and `exit.token`.
 
 ### Proxy client (`proxy.bat`)
 
-The proxy role exposes loopback SOCKS5:1080 for Firefox and connects outbound
+The proxy role exposes SOCKS5:1080 for Firefox and connects outbound
 to the relay. Unprivileged.
 
 ```bat
@@ -266,7 +266,7 @@ Edit the `<RELAY_IP>` placeholder in each BAT to the relay's fixed public IP.
 
 ## 4. Configure Firefox
 
-Point Firefox at the loopback proxy. Open Settings -- Network Settings --
+Point Firefox at the proxy. Open Settings -- Network Settings --
 *Manual proxy configuration*:
 
 | Setting                 | Value            |
@@ -280,7 +280,8 @@ Enable **SOCKS Remote DNS** so name resolution happens at the exit (through
 Windows), keeping your real destination names off the relay. Plain HTTP/HTTPS
 routing is unaffected. The relay sees only the encrypted TLS to `<relay-ip>`.
 
-Do **not** check "Proxy SOCKS v5 hosts" for localhost -- keep it loopback-only.
+For a local deployment, do **not** check "Proxy SOCKS v5 hosts" for localhost unless
+that traffic should also use the proxy.
 
 ## 5. Verify the deployment
 

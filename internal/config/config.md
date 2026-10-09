@@ -1,8 +1,8 @@
 # internal/config
 
 Builds and validates the configuration object from parsed flags. It enforces
-mode-specific required options, rejects unsafe proxy listen addresses, and
-loads bearer-token files without surfacing their contents anywhere.
+mode-specific required options and credential pairing, and loads bearer-token
+files without surfacing their contents anywhere.
 
 ## Design
 
@@ -12,9 +12,6 @@ reads files and stores opaque token values. The logging layer is responsible
 for never serializing those values.
 
 # Constants
-
-loopbackMustBeRejected = "proxy -listen must be loopback", the one structural
-guard enforced here for the proxy role.
 
 requiredFlagMissing = "missing required flag %q for mode %s", the validation
 failure shape.
@@ -28,8 +25,8 @@ failure shape.
 ## Config
 
 1. Mode Mode
-2. Listen string — relay listen address (e.g. :443) or proxy listen address
-   (loopback). Blank for exit.
+2. Listen string — relay listen address (e.g. :443) or proxy listen address.
+   Blank for exit.
 3. Relay string — relay address (host:port) the exit/proxy connect to. Blank
    for relay.
 4. TLSName string — SNI/server-name override the client presents. Blank means

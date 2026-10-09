@@ -1,6 +1,6 @@
-// Package proxy implements the browser-facing leg of MHP: a loopback SOCKS5
-// listener whose authenticated requests become relay streams. Authentication
-// happens locally; the exit receives the request after the SOCKS5 negotiation.
+// Package proxy implements the browser-facing leg of MHP: a SOCKS5 listener
+// whose authenticated requests become relay streams. Authentication happens
+// locally; the exit receives the request after the SOCKS5 negotiation.
 package proxy
 
 import (

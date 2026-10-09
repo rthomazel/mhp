@@ -137,27 +137,21 @@ func TestInvalidModeRejectedByLoad(t *testing.T) {
 	}
 }
 
-func TestProxyListenNonLoopbackRejected(t *testing.T) {
+func TestProxyWildcardListenAccepts(t *testing.T) {
 	proxyTok := writeFile(t, "proxy.token")
-	_, err := Load(ParsedFlags{
-		Mode:      ModeProxy,
-		Listen:    "0.0.0.0:1080",
-		Relay:     "relay.example.com:443",
-		CAPath:    "ca.pem",
-		TokenFile: proxyTok,
-	})
-	if err == nil {
-		t.Fatal("expected non-loopback proxy listen to be rejected")
-	}
-	ve, ok := asValidationError(err)
-	if !ok {
-		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
-	}
-	if ve.Field != "-listen" {
-		t.Fatalf("expected field -listen, got %q", ve.Field)
-	}
-	if ve.Reason == "" {
-		t.Error("expected non-empty reason")
+	for _, listen := range []string{"0.0.0.0:1080", ":1080", "[::]:1080"} {
+		t.Run(listen, func(t *testing.T) {
+			_, err := Load(ParsedFlags{
+				Mode:      ModeProxy,
+				Listen:    listen,
+				Relay:     "relay.example.com:443",
+				CAPath:    "ca.pem",
+				TokenFile: proxyTok,
+			})
+			if err != nil {
+				t.Fatalf("wildcard proxy listen rejected: %v", err)
+			}
+		})
 	}
 }
 

@@ -1,13 +1,13 @@
 # Run on the Linux browser host after provisioning ./credentials.
 # RELAY_IP=<relay-ip> docker compose up -d
-# Host networking lets the browser reach the loopback-only SOCKS listener.
+# Host networking exposes the configured SOCKS listener on the host.
 name: mhp-proxy
 services:
   proxy:
-    image: ghcr.io/rthomazel/mhp:0.1.0
+    image: ghcr.io/rthomazel/mhp:v0.2.0
     network_mode: host
     entrypoint: ["/usr/local/bin/mhp", "-mode", "proxy"]
-    command: ["-listen", "127.0.0.1:1080", "-relay", "${RELAY_IP:?set RELAY_IP}:443", "-tls-name", "en.zalando.de", "-ca", "/credentials/relay-ca.crt", "-token-file", "/credentials/proxy.token"]
+    command: ["-listen", "${PROXY_LISTEN:-127.0.0.1:1080}", "-username", "${MHP_PROXY_USERNAME:-}", "-password", "${MHP_PROXY_PASSWORD:-}", "-relay", "${RELAY_IP:?set RELAY_IP}:443", "-tls-name", "en.zalando.de", "-ca", "/credentials/relay-ca.crt", "-token-file", "/credentials/proxy.token"]
     volumes:
       - ./credentials/relay-ca.crt:/credentials/relay-ca.crt:ro
       - ./credentials/proxy.token:/credentials/proxy.token:ro

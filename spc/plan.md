@@ -81,7 +81,7 @@ Source inspected locally; these are candidates, not installed dependencies. Pin 
 
 **Deployment confirmed:** relay will run in its own container as the sole service on a dedicated VPS in Germany; TCP/443 will be available. Actual IP is TBD deployment configuration, not an architecture blocker. This is not a deployment onto the existing shared LGA stack. No shared-listener integration is required.
 
-Separate high-entropy exit and proxy bearer tokens, carried only after verified TLS. Load secrets from role-specific files or environment, not CLI arguments; constant-time comparisons, no token logging. Local SOCKS has no authentication because it binds loopback only; other local users can use it, an explicitly approved single-user-machine assumption.
+Separate high-entropy exit and proxy bearer tokens, carried only after verified TLS. Load secrets from role-specific files or environment, not CLI arguments; constant-time comparisons, no token logging. Local SOCKS may omit authentication when bound to loopback; public listeners must use username/password authentication.
 
 Before starting yamux, exchange bounded control records over TLS:
 
@@ -128,7 +128,7 @@ mhp -mode exit-node -relay <ip>:443 -tls-name en.zalando.de -ca relay-ca.crt -to
 mhp -mode proxy -relay <ip>:443 -tls-name en.zalando.de -ca relay-ca.crt -token-file proxy.token -listen 127.0.0.1:1080 -debug
 ```
 
-Validate mode-specific options. Proxy listen address must be loopback; no accidental `0.0.0.0`. Firefox: SOCKS v5, localhost port 1080. Proxy-DNS checkbox may be on or off; neither is a correctness requirement.
+Validate mode-specific options. Public proxy listeners require paired username/password credentials. Firefox: SOCKS v5, localhost port 1080 for local deployments. Proxy-DNS checkbox may be on or off; neither is a correctness requirement.
 
 All modes support `-debug`: console output plus `mhp-debug-{mode}-{unix-seconds}.txt` in current working directory. Use exclusive create with a suffix on collision rather than truncating an existing same-second log. File creation failure is an explicit startup error. Files may reveal destinations; restrictive permissions where supported, and no payloads/tokens/private keys. Default logs report startup, connection state and errors; debug adds stream IDs, durations, bytes, reconnect reasons. Avoid full URLs or HTTP parsing.
 
@@ -153,14 +153,14 @@ internal/config/     mode-specific validation and credential loading
 internal/logging/    console/file setup and dependency adapters
 internal/transport/  TLS, auth records, yamux config, session reconnect loop
 internal/relay/      role registry, replacement generations, stream pairing
-internal/proxy/      loopback listener, bridge to relay streams
+internal/proxy/      SOCKS listener, bridge to relay streams
 internal/exit/       SOCKS handler, destination resolve/dial and access rules
 internal/stream/     net.Conn adapter and cancellation-aware duplex copy
 ```
 
 Transport owns TLS socket and mux session. Each stream handler owns its stream pair/destination connection. Constructors don't launch hidden goroutines; `Run(ctx)` methods own and join work. Main uses `signal.NotifyContext`; return errors rather than calling `os.Exit` from packages.
 
-Implementation sequence and verification procedures are maintained in [tasks.md](tasks.md). No production implementation in this PR; private-CA TLS and loopback-only unauthenticated SOCKS5 are approved.
+Implementation sequence and verification procedures are maintained in [tasks.md](tasks.md). No production implementation in this PR; private-CA TLS and optional authenticated SOCKS5 are approved.
 
 ## Direct netdiag reuse references
 
