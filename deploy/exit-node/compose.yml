@@ -3,7 +3,7 @@
 name: mhp-exit-node
 services:
   exit-node:
-    image: ghcr.io/rthomazel/mhp:v0.2.0
+    image: ghcr.io/rthomazel/mhp:v0.2.1
     command: ["-mode", "exit-node", "-relay", "${RELAY_IP:?set RELAY_IP}:443", "-tls-name", "en.zalando.de", "-ca", "/credentials/relay-ca.crt", "-token-file", "/credentials/exit.token"]
     volumes:
       - ./credentials/relay-ca.crt:/credentials/relay-ca.crt:ro

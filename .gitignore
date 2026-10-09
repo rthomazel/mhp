@@ -9,11 +9,7 @@ bin/mhp
 # Credentials and keys. Security-critical: never commit keys, tokens,
 # CSRs, or the CA serial. The relay client material lives under
 # deploy/relay/credentials and is intentionally excluded wholesale.
-deploy/*/credentials/
-*.key
-*.csr
-*.srl
-*.token
+deploy/*/credentials/*
 
 # Runtime debug files (may reveal destinations).
 mhp-debug-*.txt
