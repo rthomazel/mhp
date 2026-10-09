@@ -113,7 +113,7 @@ func (l *Listener) bridge(ctx context.Context, conn net.Conn, writer io.Writer, 
 }
 
 func forwardRequest(dst io.Writer, request *socks5.Request) error {
-	if _, err := dst.Write(request.Request.Bytes()); err != nil {
+	if _, err := dst.Write(request.Bytes()); err != nil {
 		return fmt.Errorf("proxy: forward request: %w", err)
 	}
 	return nil
