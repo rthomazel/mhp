@@ -129,7 +129,7 @@ func (c *requestConn) Read(p []byte) (int, error) { return c.reader.Read(p) }
 // CloseWrite fully closes the browser connection when the relay stream ends.
 // Keeping the local TCP connection half-open here makes Duplex wait for its
 // drain timeout if the SOCKS client is still waiting for a response.
-func (c *requestConn) CloseWrite() error { return c.Conn.Close() }
+func (c *requestConn) CloseWrite() error { return c.Close() }
 
 func (l *Listener) authMethods() []socks5.Authenticator {
 	if l.username == "" && l.password == "" {
