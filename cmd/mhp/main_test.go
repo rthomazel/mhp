@@ -28,6 +28,8 @@ func TestParseFlagsExtraction(t *testing.T) {
 		"-tls-key", "relay.key",
 		"-exit-token-file", "exit.token",
 		"-proxy-token-file", "proxy.token",
+		"-username", "alice",
+		"-password", "secret",
 		"-debug",
 	}
 	flags, err := parseFlags(argv)
@@ -39,6 +41,9 @@ func TestParseFlagsExtraction(t *testing.T) {
 	}
 	if flags.Listen != ":443" {
 		t.Errorf("listen = %q, want :443", flags.Listen)
+	}
+	if flags.Username != "alice" || flags.Password != "secret" {
+		t.Errorf("credentials = %q/%q, want alice/secret", flags.Username, flags.Password)
 	}
 	if !flags.Debug {
 		t.Error("debug flag not parsed")

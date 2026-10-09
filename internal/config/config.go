@@ -72,6 +72,10 @@ type Config struct {
 
 	// Token is the loaded presented-role bearer. Only exit/proxy.
 	Token Secret
+
+	// Username and Password configure optional SOCKS5 authentication. Only proxy.
+	Username string
+	Password string
 }
 
 // Mode returns the mode string.
@@ -116,6 +120,8 @@ type ParsedFlags struct {
 	TokenFile      string
 	ExitTokenFile  string
 	ProxyTokenFile string
+	Username       string
+	Password       string
 	Debug          bool
 }
 
@@ -166,6 +172,8 @@ func build(parsed ParsedFlags) (Config, error) {
 			TLSName:   parsed.TLSName,
 			CAPath:    parsed.CAPath,
 			TokenFile: parsed.TokenFile,
+			Username:  parsed.Username,
+			Password:  parsed.Password,
 		}, nil
 	default:
 		return Config{}, &ValidationError{Field: "mode", Reason: "unrecognized mode"}
@@ -195,8 +203,13 @@ func validate(cfg *Config) error {
 			return &ValidationError{Field: "-token-file", Reason: "required for " + string(cfg.Mode)}
 		}
 	}
-	if cfg.Mode == ModeProxy && !isLoopback(cfg.Listen) {
-		return &ValidationError{Field: "-listen", Reason: "proxy listen must be loopback"}
+	if cfg.Mode == ModeProxy {
+		if !isLoopback(cfg.Listen) {
+			return &ValidationError{Field: "-listen", Reason: "proxy listen must be loopback"}
+		}
+		if (cfg.Username == "") != (cfg.Password == "") {
+			return &ValidationError{Field: "-username/-password", Reason: "both must be provided for proxy authentication"}
+		}
 	}
 	return nil
 }

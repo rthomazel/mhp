@@ -20,6 +20,23 @@ import (
 	"github.com/rthomazel/mhp/internal/transport"
 )
 
+func TestAuthMethods(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	conn := transport.NewConnector(transport.Authenticator{}, quietLogger(), nil)
+	listener := New(ln, conn, quietLogger(), "alice", "secret")
+	methods := listener.authMethods()
+	if len(methods) != 1 {
+		t.Fatalf("auth methods = %d, want 1", len(methods))
+	}
+	if methods[0].GetCode() != 0x02 {
+		t.Fatalf("auth method = %d, want username/password", methods[0].GetCode())
+	}
+}
+
 func testTiming() transport.Timing {
 	t := transport.DefaultTiming
 	t.SetupTimeout = 2 * time.Second
