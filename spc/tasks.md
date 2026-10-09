@@ -9,7 +9,7 @@ created: 2026-09-23
 
 # MHP implementation tasks
 
-Status: pending; this PR contains no application code. Requirements and decisions live in [plan.md](plan.md). Complete tasks in order. Private-CA TLS and unauthenticated loopback SOCKS5 are approved. Record validation results with the implementing PR, not fabricated checkmarks here.
+Status: pending; this PR contains no application code. Requirements and decisions live in [plan.md](plan.md). Complete tasks in order. Private-CA TLS and optional authenticated SOCKS5 are approved. Record validation results with the implementing PR, not fabricated checkmarks here.
 
 ## 1. Bootstrap, configuration and logs
 
@@ -57,7 +57,7 @@ Done when: synthetic bidirectional streams traverse both TLS legs and terminate 
 
 Depends on task 3.
 
-- [ ] Proxy accepts localhost TCP and passes each connection intact into its relay stream. Keep listener alive across relay outages; fail new connections promptly while unavailable.
+- [ ] Proxy accepts configured TCP listeners and passes each connection intact into its relay stream. Keep listener alive across relay outages; fail new connections promptly while unavailable.
 - [ ] Exit passes each incoming stream to SOCKS5 `ServeConn`; explicitly allow CONNECT only. Preserve the library's buffered reader.
 - [ ] Inject session-aware bounded resolver/dial callbacks and setup deadline handling. Clear setup deadlines only on successful CONNECT, not after a fixed timer. Report destination socket bound address correctly.
 - [ ] Enforce approved Internet-only policy on concrete addresses, normalize mapped IPv4, and avoid a second unchecked resolution when dialing. Unit-test forbidden ranges and hostname results; loopback integration exception must be test-only.

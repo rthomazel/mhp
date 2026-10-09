@@ -77,7 +77,7 @@ func runWithContext(ctx context.Context, flags config.ParsedFlags) error {
 func parseFlags(argv []string) (config.ParsedFlags, error) {
 	f := flag.NewFlagSet("mhp", flag.ContinueOnError)
 	mode := f.String("mode", "", "one of relay, exit-node, proxy")
-	listen := f.String("listen", "", "relay listen address (relay) or proxy listen address (proxy, loopback)")
+	listen := f.String("listen", "", "relay listen address (relay) or proxy listen address (proxy)")
 	relay := f.String("relay", "", "relay address host:port the exit-node/proxy connect to")
 	tlsName := f.String("tls-name", "", "SNI/server-name override the client presents")
 	ca := f.String("ca", "", "path to the trusted CA certificate file")
@@ -233,8 +233,8 @@ func runExit(ctx context.Context, cfg config.Config, logger *logging.Logger) err
 	return err
 }
 
-// runProxy is the proxy role. It listens on a loopback address (validated by
-// config.Load) and forwards each browser connection intact into the current
+// runProxy is the proxy role. It listens on the configured address and
+// forwards each browser connection intact into the current
 // relay session, which carries it to the exit. Like the exit runner it runs the
 // connector in the background and consumes sessions in the foreground.
 func runProxy(ctx context.Context, cfg config.Config, logger *logging.Logger) error {

@@ -127,8 +127,8 @@ type ParsedFlags struct {
 
 // Load builds and validates the configuration from parsed flags.
 //
-// It determines the mode, checks required flags, guards the proxy listen
-// address, and loads the role-appropriate token file(s). It returns one
+// It determines the mode, checks required flags, and loads the
+// role-appropriate token file(s). It returns one
 // validated Config or a ValidationError.
 func Load(parsed ParsedFlags) (Config, error) {
 	cfg, err := build(parsed)
@@ -180,7 +180,7 @@ func build(parsed ParsedFlags) (Config, error) {
 	}
 }
 
-// validate enforces mode-specific required flags and the proxy listen guard.
+// validate enforces mode-specific required flags and credential pairing.
 func validate(cfg *Config) error {
 	switch cfg.Mode {
 	case ModeRelay:
@@ -204,9 +204,6 @@ func validate(cfg *Config) error {
 		}
 	}
 	if cfg.Mode == ModeProxy {
-		if !isLoopback(cfg.Listen) {
-			return &ValidationError{Field: "-listen", Reason: "proxy listen must be loopback"}
-		}
 		if (cfg.Username == "") != (cfg.Password == "") {
 			return &ValidationError{Field: "-username/-password", Reason: "both must be provided for proxy authentication"}
 		}
