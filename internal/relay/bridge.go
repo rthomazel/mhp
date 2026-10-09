@@ -61,7 +61,7 @@ func (b *Bridge) ServeProxy(ctx context.Context, proxy *yamux.Session) error {
 
 		exit, _, ok := b.reg.Current(config.ModeExit)
 		if !ok {
-			// No exit available: close promptly, never queue.
+			// No exit available: close this stream promptly, never queue it.
 			_ = proxyStream.Close()
 			b.logger.Warn("relay: proxy stream with no exit", "proxy_stream", proxyStream.StreamID())
 			continue

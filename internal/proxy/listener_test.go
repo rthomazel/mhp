@@ -17,8 +17,24 @@ import (
 	"time"
 
 	"github.com/rthomazel/mhp/internal/config"
+	"github.com/rthomazel/mhp/internal/stream"
 	"github.com/rthomazel/mhp/internal/transport"
 )
+
+func TestRequestConnCloseWriteClosesLocalConnection(t *testing.T) {
+	client, local := net.Pipe()
+	defer func() { _ = client.Close() }()
+	request := &requestConn{Conn: local, reader: local}
+
+	if err := stream.CloseWrite(request); err != nil {
+		t.Fatalf("close relay-facing write side: %v", err)
+	}
+
+	_ = client.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := client.Read(make([]byte, 1)); err == nil {
+		t.Fatal("local connection remained open after relay stream close")
+	}
+}
 
 func TestAuthMethods(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
