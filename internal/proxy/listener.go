@@ -1,81 +1,67 @@
 // Package proxy implements the browser-facing leg of MHP: a loopback SOCKS5
-// listener whose connections become a single relay stream each. The proxy
-// speaks no SOCKS5 of its own — it forwards the browser's SOCKS5 exchange and
-// the subsequent payload bytes verbatim to the exit, which owns the SOCKS5
-// server. The relay bridge carries those bytes unchanged, so Internet egress
-// always originates at the exit, never at the proxy.
-//
-// Each accepted local TCP connection snapshots the current relay session,
-// opens one stream toward the relay, and duplex-copies between the local
-// connection and that stream. The loopback listener stays up regardless of
-// relay availability: while the client is mid-reconnect the proxy simply
-// fails new connections promptly rather than queuing them.
+// listener whose authenticated requests become relay streams. Authentication
+// happens locally; the exit receives the request after the SOCKS5 negotiation.
 package proxy
 
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"time"
 
 	"github.com/rthomazel/mhp/internal/stream"
 	"github.com/rthomazel/mhp/internal/transport"
+	socks5 "github.com/things-go/go-socks5"
 )
 
-// MaxPending is the capacity of the admission semaphore. It caps the number of
-// simultaneously bridged browser connections at the proxy, as the plan pins.
+// MaxPending is the capacity of the admission semaphore.
 const MaxPending = 256
 
-// Listener accepts browser TCP connections on a loopback address and bridges
-// each into the current relay session. It is intentionally decoupled from the
-// connector's reconnect loop: it only ever reaches the freshest session through
-// Snapshot, so it degrades gracefully across outages.
+// Listener accepts browser TCP connections and serves local SOCKS5
+// authentication before bridging each request into the current relay session.
 type Listener struct {
 	ln        net.Listener
 	connector *transport.Connector
 	logger    *slog.Logger
 	sem       chan struct{}
+	username  string
+	password  string
 }
 
-// New returns a Listener that accepts on ln and bridges into the connector's
-// current session. The admission capacity is fixed at MaxPending; passing a
-// value here is unnecessary because the semaphore is sized at construction.
-func New(ln net.Listener, connector *transport.Connector, logger *slog.Logger) *Listener {
+// New returns a Listener. Empty credentials disable authentication.
+func New(ln net.Listener, connector *transport.Connector, logger *slog.Logger, credentials ...string) *Listener {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	var username, password string
+	if len(credentials) >= 2 {
+		username, password = credentials[0], credentials[1]
 	}
 	return &Listener{
 		ln:        ln,
 		connector: connector,
 		logger:    logger,
 		sem:       make(chan struct{}, MaxPending),
+		username:  username,
+		password:  password,
 	}
 }
 
-// ListenAddr returns the address the listener is bound to. Useful for tests
-// that must learn the ephemeral port a :0 listener was granted.
+// ListenAddr returns the listener address.
 func (l *Listener) ListenAddr() net.Addr { return l.ln.Addr() }
 
-// Run accepts browser connections until ctx is cancelled or the listener is
-// closed. It returns when the listener stops; accept failures never abort the
-// loop. New connections admitted while no session is available are closed
-// promptly rather than queued, and the global bridge count never exceeds the
-// admission semaphore capacity.
-//
-// A background goroutine watches ctx and closes the listener on cancellation so
-// the parked Accept returns and Run can unwind. Without this a cancelled
-// context would leave Run stuck in Accept forever.
+// Run accepts browser connections until ctx is cancelled or the listener stops.
 func (l *Listener) Run(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		_ = l.ln.Close()
 	}()
-
 	for {
 		conn, err := l.ln.Accept()
 		if err != nil {
-			// A closed listener or cancelled context is the only reason to stop.
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -87,61 +73,68 @@ func (l *Listener) Run(ctx context.Context) error {
 	}
 }
 
-// serve bridges a single browser connection. It admits work through the
-// semaphore, snapshots the current session, opens one relay stream, and
-// duplex-copies until either side finishes or the session ends.
 func (l *Listener) serve(ctx context.Context, conn net.Conn) {
 	defer func() { _ = conn.Close() }()
-
-	// Non-blocking admission: if the proxy is already bridging at capacity,
-	// close this connection immediately rather than letting the accept loop
-	// stall behind it.
 	if !l.acquire() {
-		l.logger.Debug("proxy: connection limit reached, refusing",
-			"peer", conn.RemoteAddr().String(), "active", len(l.sem), "limit", MaxPending)
+		l.logger.Debug("proxy: connection limit reached, refusing", "peer", conn.RemoteAddr())
 		return
 	}
 	defer l.release()
 
-	link, ok := l.connector.Snapshot()
-	if !ok {
-		// Mid-reconnect or not yet connected: fail promptly, never queue.
-		l.logger.Debug("proxy: no relay session, closing browser connection")
-		return
-	}
-
-	relayConn, err := link.Session.OpenStream()
-	if err != nil {
-		l.logger.Warn("proxy: failed to open relay stream", "error", err)
-		return
-	}
-
-	defer func() { _ = relayConn.Close() }()
-	started := time.Now()
-	logger := l.logger.With("session_id", link.Session.ID)
-	if identified, ok := relayConn.(interface{ StreamID() uint32 }); ok {
-		logger = logger.With("stream_id", identified.StreamID())
-	}
-	defer func() {
-		logger.Debug("proxy: stream ended", "elapsed_ms", time.Since(started).Milliseconds(), "active", len(l.sem))
-	}()
-
-	// Debug: mark the start of a browser flow so the debug file shows the proxy
-	// accepting real client connections and reaching the relay.
-	logger.Debug("proxy: opened relay stream",
-		"proxy_peer", conn.RemoteAddr().String(),
+	server := socks5.NewServer(
+		socks5.WithAuthMethods(l.authMethods()),
+		socks5.WithConnectHandle(func(_ context.Context, writer io.Writer, request *socks5.Request) error {
+			return l.bridge(ctx, conn, writer, request)
+		}),
 	)
-
-	// Duplex ties the bridge's lifetime to the session: when the session ends
-	// or ctx is cancelled the copy unwinds, so a relay outage tears down the
-	// browser flow without leaking the goroutine.
-	dup := stream.NewDuplex(conn, relayConn)
-	if err := dup.Run(link.Ctx); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Warn("proxy: bridge closed", "error", err)
+	if err := server.ServeConn(conn); err != nil && !errors.Is(err, context.Canceled) {
+		l.logger.Debug("proxy: SOCKS5 connection ended", "error", err)
 	}
 }
 
-// acquire attempts a non-blocking entry into the admission gate.
+func (l *Listener) bridge(ctx context.Context, conn net.Conn, writer io.Writer, request *socks5.Request) error {
+	link, ok := l.connector.Snapshot()
+	if !ok {
+		return fmt.Errorf("proxy: no relay session")
+	}
+	relayConn, err := link.Session.OpenStream()
+	if err != nil {
+		return fmt.Errorf("proxy: open relay stream: %w", err)
+	}
+	defer func() { _ = relayConn.Close() }()
+
+	if err := forwardRequest(relayConn, request); err != nil {
+		return err
+	}
+	logger := l.logger.With("session_id", link.Session.ID)
+	started := time.Now()
+	defer func() { logger.Debug("proxy: stream ended", "elapsed_ms", time.Since(started).Milliseconds()) }()
+	return stream.NewDuplex(&requestConn{Conn: conn, reader: request.Reader}, relayConn).Run(link.Ctx)
+}
+
+func forwardRequest(dst io.Writer, request *socks5.Request) error {
+	if _, err := dst.Write(request.Request.Bytes()); err != nil {
+		return fmt.Errorf("proxy: forward request: %w", err)
+	}
+	return nil
+}
+
+type requestConn struct {
+	net.Conn
+	reader io.Reader
+}
+
+func (c *requestConn) Read(p []byte) (int, error) { return c.reader.Read(p) }
+
+func (l *Listener) authMethods() []socks5.Authenticator {
+	if l.username == "" && l.password == "" {
+		return []socks5.Authenticator{&socks5.NoAuthAuthenticator{}}
+	}
+	return []socks5.Authenticator{&socks5.UserPassAuthenticator{
+		Credentials: socks5.StaticCredentials{l.username: l.password},
+	}}
+}
+
 func (l *Listener) acquire() bool {
 	select {
 	case l.sem <- struct{}{}:
@@ -151,7 +144,6 @@ func (l *Listener) acquire() bool {
 	}
 }
 
-// release returns a slot to the admission gate.
 func (l *Listener) release() {
 	select {
 	case <-l.sem:

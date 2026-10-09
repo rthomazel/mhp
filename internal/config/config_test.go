@@ -161,6 +161,15 @@ func TestProxyListenNonLoopbackRejected(t *testing.T) {
 	}
 }
 
+func TestProxyCredentialsMustBePaired(t *testing.T) {
+	token := writeFile(t, "proxy.token")
+	_, err := Load(ParsedFlags{Mode: ModeProxy, Listen: "127.0.0.1:1080", Relay: "relay:443", TokenFile: token, Username: "user"})
+	ve, ok := asValidationError(err)
+	if !ok || ve.Field != "-username/-password" {
+		t.Fatalf("expected credential validation error, got %v", err)
+	}
+}
+
 func TestLoopbackAccepts(t *testing.T) {
 	if !isLoopback("127.0.0.1:1080") {
 		t.Error("127.0.0.1 should be loopback")

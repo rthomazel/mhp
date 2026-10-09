@@ -86,6 +86,8 @@ func parseFlags(argv []string) (config.ParsedFlags, error) {
 	tokenFile := f.String("token-file", "", "path to the single-role token file")
 	exitTokenFile := f.String("exit-token-file", "", "path to the relay's exit token file")
 	proxyTokenFile := f.String("proxy-token-file", "", "path to the relay's proxy token file")
+	username := f.String("username", "", "SOCKS5 proxy username (proxy)")
+	password := f.String("password", "", "SOCKS5 proxy password (proxy)")
 	debug := f.Bool("debug", false, "enable debug logging to console and a cwd debug file")
 
 	if err := f.Parse(argv); err != nil {
@@ -102,6 +104,8 @@ func parseFlags(argv []string) (config.ParsedFlags, error) {
 		TokenFile:      *tokenFile,
 		ExitTokenFile:  *exitTokenFile,
 		ProxyTokenFile: *proxyTokenFile,
+		Username:       *username,
+		Password:       *password,
 		Debug:          *debug,
 	}, nil
 }
@@ -265,7 +269,7 @@ func runProxy(ctx context.Context, cfg config.Config, logger *logging.Logger) er
 		"address", ln.Addr().String(),
 	)
 
-	listener := proxy.New(ln, connector, logger.Slog)
+	listener := proxy.New(ln, connector, logger.Slog, cfg.Username, cfg.Password)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
