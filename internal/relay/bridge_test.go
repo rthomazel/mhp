@@ -72,7 +72,7 @@ func TestBridgePairsStreams(t *testing.T) {
 }
 
 // TestBridgeNoExitClosesStream verifies that with no exit registered the relay
-// closes the incoming stream immediately rather than queuing it.
+// closes each incoming stream immediately while keeping the proxy session open.
 func TestBridgeNoExitClosesStream(t *testing.T) {
 	reg := NewRegistry()
 	browser, relayProxy := muxPair(t)
@@ -81,19 +81,22 @@ func TestBridgeNoExitClosesStream(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	defer func() { _ = relayProxy.Close() }()
+	defer func() { _ = browser.Close() }()
 	go func() { _ = br.ServeProxy(ctx, relayProxy) }()
 
-	browserStream, err := browser.OpenStream()
-	if err != nil {
-		t.Fatalf("browser open stream: %v", err)
-	}
-	defer func() { _ = browserStream.Close() }()
-
-	_ = browserStream.SetReadDeadline(time.Now().Add(2 * time.Second))
-	buf := make([]byte, 1)
-	_, err = browserStream.Read(buf)
-	if err == nil {
-		t.Fatalf("expected EOF when relay closes stream with no exit")
+	for i := 0; i < 2; i++ {
+		browserStream, err := browser.OpenStream()
+		if err != nil {
+			t.Fatalf("browser open stream %d: %v", i, err)
+		}
+		_ = browserStream.SetReadDeadline(time.Now().Add(2 * time.Second))
+		buf := make([]byte, 1)
+		_, err = browserStream.Read(buf)
+		_ = browserStream.Close()
+		if err == nil {
+			t.Fatalf("expected EOF when relay closes stream %d with no exit", i)
+		}
 	}
 }
 
