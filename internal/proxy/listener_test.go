@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -19,6 +20,7 @@ import (
 	"github.com/rthomazel/mhp/internal/config"
 	"github.com/rthomazel/mhp/internal/stream"
 	"github.com/rthomazel/mhp/internal/transport"
+	socks5 "github.com/things-go/go-socks5"
 )
 
 func TestRequestConnCloseWriteClosesLocalConnection(t *testing.T) {
@@ -33,6 +35,84 @@ func TestRequestConnCloseWriteClosesLocalConnection(t *testing.T) {
 	_ = client.SetReadDeadline(time.Now().Add(time.Second))
 	if _, err := client.Read(make([]byte, 1)); err == nil {
 		t.Fatal("local connection remained open after relay stream close")
+	}
+}
+
+func TestForwardRequestNegotiatesExitNoAuth(t *testing.T) {
+	browser, exit := net.Pipe()
+	defer func() { _ = browser.Close() }()
+	defer func() { _ = exit.Close() }()
+	_ = browser.SetDeadline(time.Now().Add(time.Second))
+	_ = exit.SetDeadline(time.Now().Add(time.Second))
+
+	connectRequest := []byte{0x05, 0x01, 0x00, 0x01, 1, 1, 1, 1, 0, 80}
+	request, err := socks5.ParseRequest(bytes.NewReader(connectRequest))
+	if err != nil {
+		t.Fatalf("parse test CONNECT request: %v", err)
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		greeting := make([]byte, 3)
+		if _, err := io.ReadFull(exit, greeting); err != nil {
+			serverErr <- err
+			return
+		}
+		if !bytes.Equal(greeting, []byte{0x05, 0x01, 0x00}) {
+			serverErr <- errors.New("unexpected SOCKS5 greeting")
+			return
+		}
+		if _, err := exit.Write([]byte{0x05, 0x00}); err != nil {
+			serverErr <- err
+			return
+		}
+		got := make([]byte, len(connectRequest))
+		if _, err := io.ReadFull(exit, got); err != nil {
+			serverErr <- err
+			return
+		}
+		if !bytes.Equal(got, connectRequest) {
+			serverErr <- errors.New("forwarded CONNECT request differs")
+			return
+		}
+		serverErr <- nil
+	}()
+
+	if err := forwardRequest(browser, request); err != nil {
+		t.Fatalf("forward request: %v", err)
+	}
+	if err := <-serverErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestForwardRequestRejectsUnsupportedExitAuth(t *testing.T) {
+	browser, exit := net.Pipe()
+	defer func() { _ = browser.Close() }()
+	defer func() { _ = exit.Close() }()
+	_ = browser.SetDeadline(time.Now().Add(time.Second))
+	_ = exit.SetDeadline(time.Now().Add(time.Second))
+
+	request, err := socks5.ParseRequest(bytes.NewReader([]byte{0x05, 0x01, 0x00, 0x01, 1, 1, 1, 1, 0, 80}))
+	if err != nil {
+		t.Fatalf("parse test CONNECT request: %v", err)
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		greeting := make([]byte, 3)
+		_, err := io.ReadFull(exit, greeting)
+		if err == nil {
+			_, err = exit.Write([]byte{0x05, 0xff})
+		}
+		serverErr <- err
+	}()
+
+	if err := forwardRequest(browser, request); err == nil {
+		t.Fatal("forwardRequest succeeded when exit rejected no-auth")
+	}
+	if err := <-serverErr; err != nil {
+		t.Fatal(err)
 	}
 }
 

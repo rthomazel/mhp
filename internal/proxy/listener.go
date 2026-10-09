@@ -112,9 +112,38 @@ func (l *Listener) bridge(ctx context.Context, conn net.Conn, writer io.Writer, 
 	return stream.NewDuplex(&requestConn{Conn: conn, reader: request.Reader}, relayConn).Run(link.Ctx)
 }
 
-func forwardRequest(dst io.Writer, request *socks5.Request) error {
-	if _, err := dst.Write(request.Bytes()); err != nil {
+func forwardRequest(dst net.Conn, request *socks5.Request) error {
+	// The proxy already consumed the browser's SOCKS greeting and optional
+	// authentication. Start a fresh no-auth negotiation for the exit's SOCKS
+	// server before forwarding the CONNECT request it expects next.
+	if err := writeFull(dst, []byte{0x05, 0x01, 0x00}); err != nil {
+		return fmt.Errorf("proxy: start exit SOCKS5 negotiation: %w", err)
+	}
+
+	var methodReply [2]byte
+	if _, err := io.ReadFull(dst, methodReply[:]); err != nil {
+		return fmt.Errorf("proxy: read exit SOCKS5 method selection: %w", err)
+	}
+	if methodReply != [2]byte{0x05, 0x00} {
+		return fmt.Errorf("proxy: exit rejected SOCKS5 no-auth negotiation: %x", methodReply)
+	}
+
+	if err := writeFull(dst, request.Bytes()); err != nil {
 		return fmt.Errorf("proxy: forward request: %w", err)
+	}
+	return nil
+}
+
+func writeFull(dst io.Writer, data []byte) error {
+	for len(data) > 0 {
+		written, err := dst.Write(data)
+		if err != nil {
+			return err
+		}
+		if written == 0 {
+			return io.ErrShortWrite
+		}
+		data = data[written:]
 	}
 	return nil
 }
